@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "405164046105",
+    "project_id": "aioglobal-6f6b3",
+    "storage_bucket": "aioglobal-6f6b3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:405164046105:android:544029628ac076fa5bf788",
+        "android_client_info": {
+          "package_name": "com.ktsgroup.aioglobal"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD7o3Z4iwBuY6t13_8Q6sjwmaEUsJB6-_A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

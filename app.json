@@ -1,0 +1,135 @@
+{
+  "expo": {
+    "name": "AIOGlobal",
+    "slug": "Aioglobal",
+    "scheme": "exp+aioglobal",
+    "version": "1.9.3",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "newArchEnabled": false,
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "bundleIdentifier": "com.ktsgroup.aioglobal",
+      "supportsTablet": false,
+      "buildNumber": "99",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Ứng dụng cần quyền dùng camera cho video call",
+        "NSMicrophoneUsageDescription": "Ứng dụng cần quyền dùng microphone cho voice call",
+        "UIBackgroundModes": [
+          "voip",
+          "audio"
+        ]
+      },
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "entitlements": {
+        "com.apple.developer.usernotifications.communication": true
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.ktsgroup.aioglobal",
+      "versionCode": 102,
+      "permissions": [
+        "android.permission.READ_PHONE_NUMBERS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.MANAGE_OWN_CALLS",
+        "android.permission.BIND_TELECOM_CONNECTION_SERVICE",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.ANSWER_PHONE_CALLS",
+        "android.permission.READ_PHONE_STATE"
+      ],
+      "blockedPermissions": [],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyC_GazuNlyja8hJKMEMCqI1Aq1RXuTpzxA"
+        }
+      },
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "@react-native-firebase/app"
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/OpenSans-Medium.ttf"
+          ]
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "Allow $(PRODUCT_NAME) to access your Face ID biometric data."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to upload."
+        }
+      ],
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": true,
+          "supportsPictureInPicture": true
+        }
+      ],
+      "./plugins/withVoipPush",
+      [
+        "@config-plugins/react-native-callkeep",
+        {
+          "ios": {
+            "isVoiceOnly": false,
+            "minimumBackgroundDuration": 1800,
+            "supportsVideo": true
+          },
+          "android": {
+            "alertTitle": "Yêu cầu quyền",
+            "alertDescription": "Ứng dụng cần quyền để hiển thị cuộc gọi.",
+            "cancelButton": "Hủy",
+            "okButton": "Đồng ý"
+          }
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "bb658a11-9183-4c71-959f-a12582c41121"
+      }
+    }
+  }
+}
