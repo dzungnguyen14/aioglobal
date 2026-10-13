@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useMemo } from 'react';
-import { View, Text, TouchableOpacity, Share, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Share, Alert, Platform } from 'react-native';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import styles from './style';
 import { useLang } from '../../../../shared/hooks';
@@ -47,10 +47,20 @@ const BottomEmo = ({ hideComment, onClickComment, item, profile, social_id}) => 
         );
     }
     const onShare = async () => {
-        await Share.share({
-            message: lang.share_post,
-            url: item.custom_url_share,
-        });
+        const shareUrl = item.custom_url_share;
+        if (!shareUrl) {
+            return;
+        }
+        try {
+            // Android bỏ qua `url`, nên phải đưa link vào `message`
+            await Share.share(
+                Platform.OS === 'android'
+                    ? { title: lang.share_post, message: `${lang.share_post}\n${shareUrl}` }
+                    : { message: lang.share_post, url: shareUrl }
+            );
+        } catch (error) {
+            console.log('Share error:', error);
+        }
     }
 
     return (
