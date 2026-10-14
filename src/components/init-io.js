@@ -4,7 +4,8 @@ import { ZOOM_API_HOST } from '../shared/constant';
 import * as Haptics from 'expo-haptics';
 import { AppState, Linking, Platform } from 'react-native';
 import RNCallKeep from 'react-native-callkeep';
-import { displayIncomingVideoCall } from './call/voip';
+import * as Device from 'expo-device';
+import { displayIncomingVideoCall, getVoipToken, subscribeVoipToken } from './call/voip';
 
 
 function socketPromise(socket) {
@@ -15,10 +16,33 @@ function socketPromise(socket) {
   };
 };
 
-const initIO = (token, dispatch, navigation) => {
+// Sent in the socket handshake query (socket.io-client v2 has no `auth` option).
+const buildHandshakeQuery = async () => {
+  const query = {
+    platform: Platform.OS,
+    os_version: Device.osVersion || String(Platform.Version),
+    device_model: Device.modelName,
+    device_name: Device.deviceName,
+  };
+  if (Platform.OS === 'ios') {
+    const voipToken = await getVoipToken().catch(() => null);
+    if (voipToken) query.voip_token = voipToken;
+  }
+  return Object.fromEntries(Object.entries(query).filter(([, v]) => v != null && v !== ''));
+};
+
+const initIO = async (token, dispatch, navigation) => {
   const io =  IO(`${ZOOM_API_HOST}/`, {
     transports: ['websocket'],
+    query: await buildHandshakeQuery(),
   });
+
+  // Keep the handshake query current so a reconnect carries a newly issued VoIP token.
+  if (Platform.OS === 'ios') {
+    subscribeVoipToken((voipToken) => {
+      io.io.opts.query = { ...io.io.opts.query, voip_token: voipToken };
+    });
+  }
 
   io.request = socketPromise(io);
 

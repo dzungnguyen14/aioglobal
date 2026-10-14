@@ -223,7 +223,11 @@ const HomeScreen = ({ navigation, route }) => {
 
     const sendPushTokens = async (voipToken) => {
       try {
-        const pushToken = await registerForPushNotificationsAsync();
+        // FCM failure (e.g. permission denied) must not block sending the VoIP token.
+        const pushToken = await registerForPushNotificationsAsync().catch((err) => {
+          console.warn("Failed to get FCM token:", err);
+          return null;
+        });
         const voip = voipToken || (Platform.OS === 'ios' ? await getVoipToken() : null);
         if (!pushToken && !voip) return;
         await updatePushToken({
