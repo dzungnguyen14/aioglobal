@@ -53,7 +53,7 @@ const ReelsPage = ({ navigation }) => {
     }
 
     try {
-      const response = await fetchReels(page, filter.limit);
+      const response = await fetchReels(page, filter.limit, { email: profile?.email }, profile?.token);
 
       if (response?.success === false) {
         console.error('fetchReels error:', response.msg);
@@ -83,7 +83,7 @@ const ReelsPage = ({ navigation }) => {
       setLoadingMore(false);
       loadingMoreRef.current = false;
     }
-  }, [filter.limit]);
+  }, [filter.limit, profile?.email, profile?.token]);
 
   useEffect(() => {
     if (skipNextPageLoadRef.current) {
@@ -207,11 +207,6 @@ const ReelsPage = ({ navigation }) => {
 
     setCommentSending(true);
     try {
-      console.log(JSON.stringify({
-        reelId: commentsReel,
-        message,
-        email: profile.email,
-      }))
       const response = await createReelComment({
         reelId: commentsReel,
         message,
@@ -257,9 +252,17 @@ const ReelsPage = ({ navigation }) => {
 
   const handleUploadSuccess = useCallback((response) => {
     setShowUpload(false);
-    Alert.alert('Thành công', 'Video đã được đăng tải');
 
     const uploadedReel = response?.editItem ?? response;
+
+    // status 2 / completed 0: server is still encoding the video, it is not in the public list yet
+    // (and the original file is replaced when encoding ends), so do not insert it locally.
+    if (uploadedReel?.status === 2 || uploadedReel?.completed === 0) {
+      Alert.alert('Thành công', 'Video đang được xử lý và sẽ hiển thị sau ít phút.');
+      return;
+    }
+
+    Alert.alert('Thành công', 'Video đã được đăng tải');
     if (uploadedReel?.reel_id) {
       const newReel = mapApiReelToReel(uploadedReel);
       if (newReel.videoUri) {
@@ -334,6 +337,7 @@ const ReelsPage = ({ navigation }) => {
             <ReelItem
               reel={reel}
               isActive={index === activeIndex}
+              shouldLoad={index === activeIndex || index === activeIndex + 1}
               profile={profile}
               onOpenComments={() => handleOpenComments(reel.id)}
             />

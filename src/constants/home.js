@@ -6,4 +6,4 @@ export const HomeTab = {
 }
 export const HASH_SALT = 'cftgi2Xk0iC2';
 
-export const IOS_VERSION = 1902;
+export const IOS_VERSION = 1903;

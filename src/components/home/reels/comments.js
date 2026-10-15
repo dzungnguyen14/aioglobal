@@ -4,6 +4,8 @@ import {
   Animated,
   FlatList,
   Image,
+  Keyboard,
+  Platform,
   Text,
   TextInput,
   TouchableOpacity,
@@ -11,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import styles, { COMMENTS_PANEL_HEIGHT } from './style';
+import styles, { COMMENTS_PANEL_HEIGHT, SCREEN_HEIGHT_VAL } from './style';
 
 const CommentRow = React.memo(({ item }) => {
   const [liked, setLiked] = useState(false);
@@ -64,6 +66,22 @@ const CommentsPanel = ({
   const translateY = useRef(new Animated.Value(COMMENTS_PANEL_HEIGHT)).current;
   const [inputText, setInputText] = useState('');
   const [mounted, setMounted] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (e) => setKeyboardHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!visible) Keyboard.dismiss();
+  }, [visible]);
 
   useEffect(() => {
     if (visible) {
@@ -117,7 +135,14 @@ const CommentsPanel = ({
       </TouchableWithoutFeedback>
 
       <Animated.View
-        style={[styles.commentsPanel, { transform: [{ translateY }] }]}
+        style={[
+          styles.commentsPanel,
+          {
+            marginBottom: keyboardHeight,
+            height: Math.min(COMMENTS_PANEL_HEIGHT, SCREEN_HEIGHT_VAL - keyboardHeight - 80),
+            transform: [{ translateY }],
+          },
+        ]}
       >
         {/* Drag handle */}
         <View style={styles.commentsHandle}>

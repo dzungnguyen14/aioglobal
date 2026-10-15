@@ -72,15 +72,16 @@ export const mapApiReelToReel = (item) => {
 /** @deprecated use mapApiReelToReel */
 export const mapApiVideoToReel = mapApiReelToReel;
 
-export const fetchReels = (page, limit, options = {}) => {
+export const fetchReels = (page, limit, options = {}, token = null) => {
     const params = new URLSearchParams({
         page: String(page),
         limit: String(limit),
     });
+    if (options.email) params.append('email', options.email);
     if (options.sort) params.append('sort', options.sort);
     if (options.user_id) params.append('user_id', String(options.user_id));
     if (options.q) params.append('q', options.q);
-    return makeRequest('get', `${API_HOST}/api/reels/public?${params}`);
+    return makeRequest('get', `${API_HOST}/api/reels/public?${params}`, null, token);
 };
 
 export const fetchReelComments = (reelId, page = 1, search = 'newest') => {
@@ -88,16 +89,17 @@ export const fetchReelComments = (reelId, page = 1, search = 'newest') => {
     formData.append('page', String(page));
     formData.append('approved', 'approved');
     formData.append('search', search);
-    return makeRequest('post', `${API_HOST}/api/reels/comments/${reelId}`, formData, null, 0, true);
+    return makeRequest('post', `${API_HOST}/api/comments/${reelId}/reels`, formData, null, 0, true);
 };
 
 export const createReelComment = ({ reelId, message, email, parentId }, token) => {
     const formData = new FormData();
     formData.append('email', email);
-    formData.append('reel_id', String(reelId));
+    formData.append('id', String(reelId));
+    formData.append('type', 'reels');
     formData.append('message', message);
     if (parentId) formData.append('parent_id', String(parentId));
-    return makeRequest('post', `${API_HOST}/api/reels/comments/create_app`, formData, token, 0, true);
+    return makeRequest('post', `${API_HOST}/api/comments/create_app`, formData, token, 0, true);
 };
 
 export const fetchReelReplies = (reelId, commentId, page = 2) => {

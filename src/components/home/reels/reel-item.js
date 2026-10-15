@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Image,
   Text,
@@ -65,13 +66,20 @@ const YoutubePlayer = ({ videoUri, isActive }) => {
   );
 };
 
-const NativeVideoPlayer = ({ videoUri, isActive, paused, onTogglePause }) => {
+const Poster = ({ uri }) => (
+  uri ? <Image source={{ uri }} style={styles.video} resizeMode="cover" /> : null
+);
+
+const NativeVideoPlayer = ({ videoUri, thumbnail, isActive, paused, onTogglePause }) => {
   const pauseScale = useRef(new Animated.Value(0)).current;
   const pauseOpacity = useRef(new Animated.Value(0)).current;
+  const [firstFrameReady, setFirstFrameReady] = useState(false);
 
   const player = useVideoPlayer(videoUri, (p) => {
     p.loop = true;
     p.muted = false;
+    // Source files are large: only buffer a few seconds ahead instead of the whole file.
+    p.bufferOptions = { preferredForwardBufferDuration: 5 };
   });
 
   useEffect(() => {
@@ -108,7 +116,20 @@ const NativeVideoPlayer = ({ videoUri, isActive, paused, onTogglePause }) => {
           player={player}
           contentFit="cover"
           nativeControls={false}
+          onFirstFrameRender={() => setFirstFrameReady(true)}
         />
+        {!firstFrameReady && (
+          <View style={styles.video} pointerEvents="none">
+            <Poster uri={thumbnail} />
+            {isActive && (
+              <ActivityIndicator
+                size="small"
+                color="#fff"
+                style={{ position: 'absolute', alignSelf: 'center', top: '50%' }}
+              />
+            )}
+          </View>
+        )}
         <Animated.View
           style={[styles.pauseIconWrap, { opacity: pauseOpacity }]}
           pointerEvents="none"
@@ -124,7 +145,7 @@ const NativeVideoPlayer = ({ videoUri, isActive, paused, onTogglePause }) => {
   );
 };
 const MAX_CAPTION_LINES = 3;
-const ReelItem = ({ reel, isActive, profile, onOpenComments }) => {
+const ReelItem = ({ reel, isActive, shouldLoad = true, profile, onOpenComments }) => {
   const [liked, setLiked] = useState(reel.isLiked);
   const [likeCount, setLikeCount] = useState(reel.likes);
   const [paused, setPaused] = useState(false);
@@ -178,9 +199,14 @@ const ReelItem = ({ reel, isActive, profile, onOpenComments }) => {
     <View style={styles.reelContainer}>
       {reel.isYoutube ? (
         <YoutubePlayer videoUri={reel.videoUri} isActive={isActive} />
+      ) : reel.videoUri && !shouldLoad ? (
+        <View style={styles.reelContainer}>
+          <Poster uri={reel.thumbnail} />
+        </View>
       ) : reel.videoUri ? (
         <NativeVideoPlayer
           videoUri={reel.videoUri}
+          thumbnail={reel.thumbnail}
           isActive={isActive}
           paused={paused}
           onTogglePause={setPaused}

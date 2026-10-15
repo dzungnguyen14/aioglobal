@@ -3,7 +3,7 @@
     "name": "AIOGlobal",
     "slug": "Aioglobal",
     "scheme": "exp+aioglobal",
-    "version": "1.9.3",
+    "version": "1.9.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -19,7 +19,7 @@
     "ios": {
       "bundleIdentifier": "com.ktsgroup.aioglobal",
       "supportsTablet": false,
-      "buildNumber": "101",
+      "buildNumber": "103",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Ứng dụng cần quyền dùng camera cho video call",
