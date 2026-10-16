@@ -38,22 +38,9 @@ const RoomView = ({ navigation, profile, calleeID, callUUID }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
   
-  // Enable camera and microphone on mount
-  useEffect(() => {
-    const enableDevices = async () => {
-      try {
-        await localParticipant.setCameraEnabled(true);
-        await localParticipant.setMicrophoneEnabled(true);
-      } catch (error) {
-        console.error('Error enabling devices:', error);
-      }
-    };
-    
-    if (localParticipant) {
-      enableDevices();
-    }
-  }, [localParticipant]);
-  
+  // Camera/mic are already enabled by <LiveKitRoom audio video>; enabling them again here
+  // republishes the local track and leaves the overlay bound to a stale one.
+
   // Separate local and remote tracks - only filter camera tracks for video display
   const cameraTrackRefs = tracks.filter(trackRef => 
     isTrackReference(trackRef) && trackRef.publication.source === Track.Source.Camera
@@ -140,7 +127,14 @@ const RoomView = ({ navigation, profile, calleeID, callUUID }) => {
       {/* Local participant in small overlay */}
       {localTrack && isTrackReference(localTrack) && (
         <View style={styles.localParticipantContainer}>
-          <VideoTrack trackRef={localTrack} style={styles.localVideoTrack} />
+          {/* Android renders video on a SurfaceView; the overlay must sit above the full-screen remote one. */}
+          <VideoTrack
+            key={localTrack.publication?.trackSid ?? 'local-placeholder'}
+            trackRef={localTrack}
+            style={styles.localVideoTrack}
+            zOrder={1}
+            mirror
+          />
           <View style={styles.localParticipantInfo}>
             <Text style={styles.localParticipantName}>Bạn</Text>
           </View>

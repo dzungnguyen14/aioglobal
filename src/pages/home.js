@@ -230,13 +230,13 @@ const HomeScreen = ({ navigation, route }) => {
         });
         const voip = voipToken || (Platform.OS === 'ios' ? await getVoipToken() : null);
         if (!pushToken && !voip) return;
-        await updatePushToken({
-          ...deviceInfo,
-          push_token: pushToken,
-          voip_token: voip || undefined,
-          access_token: item.token,
-          platform: Platform.OS,
-        }, item.token);
+        // await updatePushToken({
+        //   ...deviceInfo,
+        //   push_token: pushToken,
+        //   voip_token: voip || undefined,
+        //   access_token: item.token,
+        //   platform: Platform.OS,
+        // }, item.token);
       } catch (err) {
         console.error("Error updating push token:", err);
       }

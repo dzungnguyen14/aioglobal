@@ -1,7 +1,7 @@
 import { Text, View, StatusBar, ActivityIndicator } from "react-native";
 import { useEffect } from "react";
 import styles from "../styles/global";
-import { getItem } from "../shared/utils";
+import { getItemStrict, setItem } from "../shared/utils";
 import { featureToggle } from "../fetcher/api";
 import { useGlobal } from "../state/global";
 
@@ -11,21 +11,35 @@ function Middleware({ navigation }) {
         const resp = await featureToggle();
         dispatch({ type: 'SET_FEATURE_TOGGLE', payload: resp });
     }
-    const loadData =  () => {
-        getItem('USER_TOKEN_KEY').then(res => {
+    // The keychain can be unreadable right after a cold start from a VoIP push on a locked
+    // phone. Retry instead of treating the failed read as "logged out".
+    const readStoredProfile = async (tries = 20, delay = 500) => {
+        for (let i = 0; i < tries; i += 1) {
             try {
-                const profile = JSON.parse(res);
-                dispatch({ type: 'SET_PROFILE', payload: profile });
-                if (profile.success) {
-                    navigation.navigate("Home", { item : profile })
-                } else {
-                    navigation.navigate("Login")
-                }
+                return await getItemStrict('USER_TOKEN_KEY');
+            } catch (error) {
+                if (i === tries - 1) break;
+                await new Promise((resolve) => setTimeout(resolve, delay));
             }
-            catch {
+        }
+        return null;
+    }
+    const loadData = async () => {
+        const res = await readStoredProfile();
+        try {
+            const profile = JSON.parse(res);
+            dispatch({ type: 'SET_PROFILE', payload: profile });
+            if (profile.success) {
+                // Re-save so items written with the old WHEN_UNLOCKED policy get migrated.
+                setItem('USER_TOKEN_KEY', res);
+                navigation.navigate("Home", { item : profile })
+            } else {
                 navigation.navigate("Login")
             }
-        });
+        }
+        catch {
+            navigation.navigate("Login")
+        }
     }
 
     // Handle navigation focus events to check authentication when returning to this screen

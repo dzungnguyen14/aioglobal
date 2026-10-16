@@ -5,6 +5,7 @@ import * as Haptics from 'expo-haptics';
 import { AppState, Linking, Platform } from 'react-native';
 import RNCallKeep from 'react-native-callkeep';
 import * as Device from 'expo-device';
+import messaging from '@react-native-firebase/messaging';
 import { displayIncomingVideoCall, getVoipToken, subscribeVoipToken } from './call/voip';
 
 
@@ -24,6 +25,7 @@ const buildHandshakeQuery = async () => {
     device_model: Device.modelName,
     device_name: Device.deviceName,
   };
+  query.notify_token = await messaging().getToken().catch(() => null);
   if (Platform.OS === 'ios') {
     const voipToken = await getVoipToken().catch(() => null);
     if (voipToken) query.voip_token = voipToken;
@@ -37,7 +39,10 @@ const initIO = async (token, dispatch, navigation) => {
     query: await buildHandshakeQuery(),
   });
 
-  // Keep the handshake query current so a reconnect carries a newly issued VoIP token.
+  // Keep the handshake query current so a reconnect carries newly issued tokens.
+  messaging().onTokenRefresh((notifyToken) => {
+    io.io.opts.query = { ...io.io.opts.query, notify_token: notifyToken };
+  });
   if (Platform.OS === 'ios') {
     subscribeVoipToken((voipToken) => {
       io.io.opts.query = { ...io.io.opts.query, voip_token: voipToken };

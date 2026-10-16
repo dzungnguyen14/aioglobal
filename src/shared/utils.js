@@ -21,7 +21,9 @@ export const clearItem = async (key) => {
 }
 export const setItem = async (key, value) => {
     try {
-        await SecureStore.setItemAsync(key, value);
+        // Default WHEN_UNLOCKED makes the keychain unreadable when the app is cold-started by a
+        // VoIP push while the phone is locked, which looked like a logged-out user.
+        await SecureStore.setItemAsync(key, value, { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK });
     } catch (error) {
         // Alert.alert(JSON.stringify(error));
     }
@@ -34,6 +36,10 @@ export const getItem = async (key) => {
         // Alert.alert(JSON.stringify(error));
     }
 };
+
+// Like getItem, but rejects on keychain errors (e.g. device locked) so callers can tell
+// "key not found" (null) apart from "could not read".
+export const getItemStrict = (key) => SecureStore.getItemAsync(key);
 
 export const customNotify = (title, msg) => {
     Alert.alert(

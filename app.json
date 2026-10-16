@@ -40,7 +40,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.ktsgroup.aioglobal",
-      "versionCode": 102,
+      "versionCode": 103,
       "permissions": [
         "android.permission.READ_PHONE_NUMBERS",
         "android.permission.RECORD_AUDIO",
