@@ -1,7 +1,7 @@
 import { Camera } from 'expo-camera';
 import { Audio } from 'expo-av';
 import * as SecureStore from 'expo-secure-store';
-import { Alert, Linking, Platform } from 'react-native';
+import { Alert, AppState, Linking, PermissionsAndroid, Platform } from 'react-native';
 
 // Storage keys for cached permissions
 const PERMISSION_KEYS = {
@@ -303,3 +303,64 @@ export const getPermissionInfo = async () => {
     }
 };
 
+
+const CALL_PERMISSIONS_ANDROID = [
+    PermissionsAndroid.PERMISSIONS.CAMERA,
+    PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+];
+
+// The runtime permission dialog needs a foreground Activity. After answering from the
+// CallKeep UI the app may still be coming up (or waiting behind the lock screen).
+const waitForAppActive = (timeoutMs) => new Promise((resolve) => {
+    if (AppState.currentState === 'active') {
+        resolve(true);
+        return;
+    }
+    let timer = null;
+    const subscription = AppState.addEventListener('change', (nextState) => {
+        if (nextState !== 'active') return;
+        clearTimeout(timer);
+        subscription.remove();
+        resolve(true);
+    });
+    timer = setTimeout(() => {
+        subscription.remove();
+        resolve(false);
+    }, timeoutMs);
+});
+
+/**
+ * Make sure camera and microphone are granted before joining a call answered on Android.
+ * Asks for whatever is missing and explains (with a shortcut to Settings when the user chose
+ * "Don't ask again") when it is refused.
+ * @param {Object} lang - Language object for localized messages
+ * @returns {Promise<boolean>} true when both permissions are granted
+ */
+export const ensureCallPermissionsAndroid = async (lang = {}) => {
+    if (Platform.OS !== 'android') return true;
+    try {
+        const granted = await Promise.all(CALL_PERMISSIONS_ANDROID.map((permission) => PermissionsAndroid.check(permission)));
+        if (granted.every(Boolean)) return true;
+
+        await waitForAppActive(30000);
+        const result = await PermissionsAndroid.requestMultiple(CALL_PERMISSIONS_ANDROID);
+        const statuses = CALL_PERMISSIONS_ANDROID.map((permission) => result[permission]);
+        if (statuses.every((status) => status === PermissionsAndroid.RESULTS.GRANTED)) return true;
+
+        const blocked = statuses.includes(PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN);
+        Alert.alert(
+            lang.permission_required || 'Permission Required',
+            lang.call_permission_denied || 'Camera and microphone access is required to join the call.',
+            blocked
+                ? [
+                    { text: lang.cancel || 'Cancel', style: 'cancel' },
+                    { text: lang.open_settings || 'Open Settings', onPress: () => Linking.openSettings() },
+                ]
+                : [{ text: 'OK' }]
+        );
+        return false;
+    } catch (error) {
+        console.error('Error requesting call permissions:', error);
+        return false;
+    }
+};

@@ -24,6 +24,8 @@ import { endCall } from '../components/home/zoom/api';
 import { TabRoute } from './home';
 import RNCallKeep from 'react-native-callkeep';
 import { waitForCallAudioSession } from '../components/call/voip';
+import CallLoading from '../components/call/CallLoading';
+import { useLang } from '../shared/hooks';
 
 
 setLogLevel(LogLevel.debug);
@@ -165,6 +167,7 @@ const RoomView = ({ navigation, profile, calleeID, callUUID }) => {
 
 export default function LiveKitScreen({ route, navigation }) {
   const { state } = useGlobal();
+  const { lang } = useLang();
   const { profile } = state;
   const { token, wsURL, calleeID, callUUID } = route.params;
   const [connected, setConnected] = useState(false);
@@ -189,7 +192,9 @@ export default function LiveKitScreen({ route, navigation }) {
   }, [callUUID]);
   
 
-  if (!token || !wsURL || !connected) return null;
+  if (!token || !wsURL) return null;
+  // Waiting for the call audio session (CallKit on iOS) before joining the room.
+  if (!connected) return <CallLoading message={lang.connecting} />;
   console.log("Token : " + token, "WS URL : " + wsURL, "Connected : " + connected);
 
   return (

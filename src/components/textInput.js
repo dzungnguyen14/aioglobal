@@ -3,11 +3,11 @@ import styles from "../styles/global";
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import { useGlobal } from "../state/global";
-import { IOS_VERSION } from "../constants/home";
+import { APP_VERSION } from "../constants/home";
 
 function TextField({ label, value, onChange, required, placeholder, customStyle, type, hideLabel, keyboardType, disabled }) {
     const { state } = useGlobal();
-    const featureToggle = parseInt(state.featureToggle.ios) >= IOS_VERSION;
+    const featureToggle = parseInt(state.featureToggle.ios) >= APP_VERSION;
     const [showPassword, setShowPassword] = useState(Platform.OS === 'android' || !featureToggle);
     const toggleVisibility = () => {
         setShowPassword(!showPassword);

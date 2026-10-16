@@ -9,7 +9,7 @@ import PagerView from 'react-native-pager-view';
 import { useNavigation } from '@react-navigation/native'; // Hook to access navigation
 import HomeHeader from "./components/header";
 import { useGlobal } from "../../state/global";
-import { IOS_VERSION } from "../../constants/home";
+import { APP_VERSION } from "../../constants/home";
 
 function HomeWidget() {
     const { state } = useGlobal();
@@ -17,7 +17,7 @@ function HomeWidget() {
     const { profile } = state;
     const toggleOS = useMemo(() => {
         if (Platform.OS == 'android') return true;
-        return featureToggle.ios ? parseInt(featureToggle.ios ?? '0') >= IOS_VERSION : false
+        return featureToggle.ios ? parseInt(featureToggle.ios ?? '0') >= APP_VERSION : false
     }, [featureToggle])
 
     const navigation = useNavigation();

@@ -19,7 +19,7 @@
     "ios": {
       "bundleIdentifier": "com.ktsgroup.aioglobal",
       "supportsTablet": false,
-      "buildNumber": "103",
+      "buildNumber": "105",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Ứng dụng cần quyền dùng camera cho video call",
@@ -40,7 +40,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.ktsgroup.aioglobal",
-      "versionCode": 103,
+      "versionCode": 104,
       "permissions": [
         "android.permission.READ_PHONE_NUMBERS",
         "android.permission.RECORD_AUDIO",

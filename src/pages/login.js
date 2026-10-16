@@ -8,6 +8,7 @@ import { login, register } from "../fetcher/auth";
 import { GoogleIcon, LogoImage } from "../components/images";
 import { clearItem, getLangFromStore, setItem } from "../shared/utils";
 import { USER_TOKEN_KEY } from "../shared/constant";
+import { markSessionLogin } from "../shared/device";
 import { useLang } from "../shared/hooks";
 import { TabRoute } from "./home";
 import { useGlobal } from "../state/global";
@@ -95,6 +96,7 @@ function LoginScreen({ navigation }) {
             reset();
             dispatch({ type: 'SET_PROFILE', payload: response });
             await setItem(USER_TOKEN_KEY, JSON.stringify(response));
+            await markSessionLogin();
             navigation.navigate("Home", { item: response, screen: TabRoute.TabHome });
         } else {
             Alert.alert(lang.error, response.msg);

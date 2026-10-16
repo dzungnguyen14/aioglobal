@@ -68,6 +68,15 @@ const callKeepOptions = {
 
 const answerIncomingCall = ({ callUUID }) => {
     const call = getCachedCall(callUUID) || { uuid: callUUID };
+    // Android doesn't open the app on answer. Bring it up so the call screen (and the
+    // camera/microphone permission prompt, which needs an Activity) can be shown.
+    if (Platform.OS === 'android' && RNCallKeep) {
+        try {
+            RNCallKeep.backToForeground();
+        } catch (e) {
+            console.warn('RNCallKeep.backToForeground failed:', e);
+        }
+    }
     notifyIncomingAnswer(call);
 };
 

@@ -7,6 +7,11 @@ import RNCallKeep from 'react-native-callkeep';
 import * as Device from 'expo-device';
 import messaging from '@react-native-firebase/messaging';
 import { displayIncomingVideoCall, getVoipToken, subscribeVoipToken } from './call/voip';
+import { getDeviceGUID, getSessionLoginAt } from '../shared/device';
+import { APP_VERSION } from '../constants/home';
+
+let activeIO = null;
+let teardowns = [];
 
 
 function socketPromise(socket) {
@@ -22,8 +27,11 @@ const buildHandshakeQuery = async () => {
   const query = {
     platform: Platform.OS,
     os_version: Device.osVersion || String(Platform.Version),
+    app_version: APP_VERSION,
     device_model: Device.modelName,
     device_name: Device.deviceName,
+    device_guid: await getDeviceGUID(),
+    login_at: await getSessionLoginAt(),
   };
   query.notify_token = await messaging().getToken().catch(() => null);
   if (Platform.OS === 'ios') {
@@ -33,20 +41,34 @@ const buildHandshakeQuery = async () => {
   return Object.fromEntries(Object.entries(query).filter(([, v]) => v != null && v !== ''));
 };
 
-const initIO = async (token, dispatch, navigation) => {
+// Closes the current socket for good (no auto-reconnect), e.g. after a forced logout.
+export const disconnectIO = () => {
+  teardowns.forEach((teardown) => teardown());
+  teardowns = [];
+  if (activeIO) {
+    activeIO.disconnect();
+    activeIO = null;
+  }
+};
+
+const initIO = async (token, dispatch, navigation, { onForceLogout } = {}) => {
+  const query = await buildHandshakeQuery();
+  // A new session (e.g. after logging in again) replaces the previous socket.
+  disconnectIO();
   const io =  IO(`${ZOOM_API_HOST}/`, {
     transports: ['websocket'],
-    query: await buildHandshakeQuery(),
+    query,
   });
+  activeIO = io;
 
   // Keep the handshake query current so a reconnect carries newly issued tokens.
-  messaging().onTokenRefresh((notifyToken) => {
+  teardowns.push(messaging().onTokenRefresh((notifyToken) => {
     io.io.opts.query = { ...io.io.opts.query, notify_token: notifyToken };
-  });
+  }));
   if (Platform.OS === 'ios') {
-    subscribeVoipToken((voipToken) => {
+    teardowns.push(subscribeVoipToken((voipToken) => {
       io.io.opts.query = { ...io.io.opts.query, voip_token: voipToken };
-    });
+    }));
   }
 
   io.request = socketPromise(io);
@@ -135,6 +157,14 @@ const initIO = async (token, dispatch, navigation) => {
 
   io.on('user-deleted', async () => {
     console.warn('user-deleted');
+  });
+
+  // The server sends this to the sessions of other devices when the account signs in elsewhere.
+  io.on('force-logout', (data) => {
+    console.warn('force-logout', data);
+    if (activeIO !== io) return;
+    disconnectIO();
+    if (onForceLogout) onForceLogout(data || {});
   });
 
   io.on('typing', (data) => {

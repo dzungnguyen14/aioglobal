@@ -2,7 +2,7 @@ import { View, TouchableOpacity, Platform, Text } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useEffect, useMemo } from "react";
 import { countNotifications, fetchSupplier } from "../../../../fetcher/api";
-import { IOS_VERSION } from "../../../../constants/home";
+import { APP_VERSION } from "../../../../constants/home";
 import { useLang } from "../../../../shared/hooks";
 import { useGlobal } from "../../../../state/global";
 import { useNavigation } from "@react-navigation/native";
@@ -17,7 +17,7 @@ const TabRightIcon = ({ isShowAccount, onShowAccount }) => {
     const [notificationCount, setNotificationCount] = useState(0);
     const toggleOS = useMemo(() => {
         if (Platform.OS == 'android') return true;
-        return featureToggle.ios ? parseInt(featureToggle.ios ?? '0') >= IOS_VERSION : false
+        return featureToggle.ios ? parseInt(featureToggle.ios ?? '0') >= APP_VERSION : false
     }, [featureToggle])
 
     const getNotificationCount = async () => {

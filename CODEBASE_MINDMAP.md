@@ -759,7 +759,7 @@ src/constants/
 └── home.js
     ├── TAB_NAMES
     ├── HASH_SALT
-    └── IOS_VERSION
+    └── APP_VERSION
 ```
 
 ### Styles (`src/styles/`)

@@ -9,22 +9,23 @@ import SocialDashboard from "../components/home/socials";
 import EcommerceLoading from "../components/home/ecommerce/loading";
 import HomeNewfeedOld from "../components/home/newfeed-old";
 import { useLang, useGetDeviceInfo, useProfile } from "../shared/hooks";
-import { IOS_VERSION } from "../constants/home";
+import { APP_VERSION } from "../constants/home";
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import HomeZoom from "../components/home/zoom";
 import { clearItem, getItem, setItem } from "../shared/utils";
-import { USER_TOKEN_KEY, USER_TERMS_AGREED } from "../shared/constant";
+import { USER_TOKEN_KEY, USER_TERMS_AGREED, WALLET_STORAGE_TOKEN_KEY } from "../shared/constant";
 import TermsAgreementModal from "../components/terms-agreement";
 import { fetchVersion, updatePushToken } from "../fetcher/api";
 import { getVoipToken, subscribeVoipToken } from "../components/call/voip";
 // import { reloadAppAsync } from "expo";+
 // import * as Notifications from 'expo-notifications';
 // import * as Device from 'expo-device';
-import initIO from "../components/init-io";
+import initIO, { disconnectIO } from "../components/init-io";
 import { useGlobal } from "../state/global";
 import messaging from '@react-native-firebase/messaging';
 import useConfirmDialog from "../components/confirm";
+import RNCallKeep from 'react-native-callkeep';
 
 const Tab = createBottomTabNavigator();
 
@@ -153,17 +154,41 @@ const HomeScreen = ({ navigation, route }) => {
 
   const toggleOS = useMemo(() => {
     if (Platform.OS === 'android') return true;
-    return state.featureToggle.ios ? parseInt(state.featureToggle.ios) >= IOS_VERSION : false;
+    return state.featureToggle.ios ? parseInt(state.featureToggle.ios) >= APP_VERSION : false;
   }, [state.featureToggle.ios]);
 
-  const onLogout = useCallback(() => {
+  const forceLoggedOutRef = useRef(false);
+  // Used by both the version check and the socket `force-logout` event. The session is ended
+  // right away (not on alert dismiss) so nothing keeps running on the revoked account.
+  const handleForceLogout = useCallback(() => {
+    if (forceLoggedOutRef.current) return;
+    forceLoggedOutRef.current = true;
+    disconnectIO();
+    try {
+      RNCallKeep.endAllCalls();
+    } catch (error) {
+      console.warn('endAllCalls failed', error);
+    }
     clearItem(USER_TOKEN_KEY);
+    clearItem(WALLET_STORAGE_TOKEN_KEY);
+    dispatch({ type: 'SET_IO', payload: null });
+    dispatch({ type: 'SET_ZOOM_TOKEN', payload: null });
     dispatch({ type: 'SET_PROFILE', payload: {} });
-    navigation.navigate("Login");
-  }, []);
+    // Reset (not navigate) so an open call/LiveKit screen is unmounted too.
+    navigationRef.current.reset({ index: 0, routes: [{ name: 'Login' }] });
+    Alert.alert("", lang.force_logout_message);
+  }, [dispatch, lang]);
+  const forceLogoutRef = useRef(handleForceLogout);
+  forceLogoutRef.current = handleForceLogout;
 
   const getVersion = useCallback(async (token) => {
     const resp = await fetchVersion(token, value);
+
+    // Before zoom_token, so no socket is opened for a session that is being revoked.
+    if (resp.force_logout) {
+      handleForceLogout();
+      return;
+    }
 
     if (resp.zoom_token) {
       setZoomToken(resp.zoom_token);
@@ -174,13 +199,8 @@ const HomeScreen = ({ navigation, route }) => {
       setIsNewFeature(resp.is_new_feature);
     }
 
-    if (resp.force_logout) {
-      Alert.alert("", "Tài khoản của bạn đã được đăng nhập thiết bị khác. Vui lòng đăng nhập lại.", [
-        { text: "OK", onPress: () => onLogout() },
-      ]);
-    }
     setIsLoading(false);
-  }, [value, onLogout, dispatch]);
+  }, [value, handleForceLogout, dispatch]);
 
   useEffect(() => {
     if (item?.token) {
@@ -251,7 +271,9 @@ const HomeScreen = ({ navigation, route }) => {
 
   useEffect(() => {
     if (zoomToken && zoomToken !== '') {
-      initIO(zoomToken, dispatch, navigation);
+      initIO(zoomToken, dispatch, navigation, {
+        onForceLogout: () => forceLogoutRef.current(),
+      });
     }
   }, [zoomToken, dispatch, navigation]);
 

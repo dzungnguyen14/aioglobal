@@ -10,7 +10,7 @@ import { memo, useMemo } from 'react';
 import styles from './style';
 import { AccountImage, CustomImage } from '../../../images';
 import { TABS } from '../index';
-import { IOS_VERSION } from '../../../../constants/home';
+import { APP_VERSION } from '../../../../constants/home';
 
 const Toolbar = ({ navigation, profile, onPress, onShowProfile, tab, setTab, toggleOS }) => {
     return (
