@@ -3,7 +3,7 @@
     "name": "AIOGlobal",
     "slug": "Aioglobal",
     "scheme": "exp+aioglobal",
-    "version": "1.9.4",
+    "version": "1.9.5",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -19,7 +19,7 @@
     "ios": {
       "bundleIdentifier": "com.ktsgroup.aioglobal",
       "supportsTablet": false,
-      "buildNumber": "105",
+      "buildNumber": "108",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Ứng dụng cần quyền dùng camera cho video call",
@@ -40,7 +40,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.ktsgroup.aioglobal",
-      "versionCode": 104,
+      "versionCode": 106,
       "permissions": [
         "android.permission.READ_PHONE_NUMBERS",
         "android.permission.RECORD_AUDIO",
@@ -108,6 +108,7 @@
         }
       ],
       "./plugins/withVoipPush",
+      "./plugins/withSceneLifecycle",
       [
         "@config-plugins/react-native-callkeep",
         {

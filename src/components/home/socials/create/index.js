@@ -1,23 +1,141 @@
 import React from "react";
-import { View, Text, Modal, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from "react-native";
+import { View, Text, Modal, TouchableOpacity, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { RichEditor } from 'react-native-pell-rich-editor';
 import * as ImagePicker from 'expo-image-picker';
-import { useLang, useProfile } from "../../../../shared/hooks";
-import VideoPlayerUI from "../videoplayer";
+import { useVideoPlayer, VideoView } from 'expo-video';
 import styles from "./style";
 import { fetchSocial } from "../../../../fetcher/api";
 import { getItem, } from "../../../../shared/utils";
 import { Image } from "expo-image";
 import { useGlobal } from "../../../../state/global";
+import { AccountImage, CustomImage } from "../../../images";
 
-const TextButton = React.memo(({ icon, text, onPress, color, disabled }) => (
-    <TouchableOpacity style={[styles.textButton, disabled && styles.textButtonDisabled]} onPress={onPress} disabled={disabled}>
-        <Ionicons name={icon} size={18} color={disabled ? '#999' : (color ?? '#000')} />
-        <Text style={[styles.textButtonLabel, disabled && styles.textButtonLabelDisabled]}>{text}</Text>
-    </TouchableOpacity>
+const PRIVACY_OPTIONS = [
+    { value: false, icon: 'people', label: 'Tất cả bạn bè', description: 'Mọi người đều có thể xem bài viết này' },
+    { value: true, icon: 'lock-closed', label: 'Chỉ mình tôi', description: 'Chỉ bạn mới xem được bài viết này' },
+];
+
+// Facebook phóng to chữ khi bài viết ngắn và không có ảnh/video
+const LARGE_TEXT_LIMIT = 85;
+
+const stripHtml = (html) => (html ?? '')
+    .replace(/<(.|\n)*?>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .trim();
+
+const formatDuration = (ms) => {
+    if (!ms) return null;
+    const total = Math.round(ms / 1000);
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+};
+
+const VideoThumb = React.memo(({ uri }) => {
+    const player = useVideoPlayer({ uri }, p => {
+        p.loop = false;
+        p.muted = true;
+    });
+    return (
+        <VideoView
+            player={player}
+            style={styles.mediaFill}
+            contentFit="cover"
+            nativeControls={false}
+        />
+    );
+});
+
+const MediaTile = React.memo(({ media, style, onRemove, disabled }) => (
+    <View style={[styles.mediaTile, style]}>
+        {media.type === 'video'
+            ? <VideoThumb uri={media.uri} />
+            : <Image source={{ uri: media.uri }} style={styles.mediaFill} contentFit="cover" transition={150} />}
+        {media.type === 'video' && (
+            <View style={styles.videoOverlay} pointerEvents="none">
+                <View style={styles.playCircle}>
+                    <Ionicons name="play" size={22} color="#fff" style={{ marginLeft: 3 }} />
+                </View>
+                {!!formatDuration(media.duration) && (
+                    <View style={styles.durationBadge}>
+                        <Text style={styles.durationText}>{formatDuration(media.duration)}</Text>
+                    </View>
+                )}
+            </View>
+        )}
+        {!disabled && (
+            <TouchableOpacity style={styles.removeButton} onPress={onRemove} hitSlop={8}>
+                <Ionicons name="close" size={18} color="#fff" />
+            </TouchableOpacity>
+        )}
+    </View>
 ));
 
+const MediaGrid = ({ media, onRemove, disabled }) => {
+    if (media.length === 0) return null;
+
+    if (media.length === 1) {
+        const item = media[0];
+        const ratio = item.width && item.height ? item.width / item.height : 4 / 3;
+        return (
+            <View style={styles.mediaGrid}>
+                <MediaTile
+                    media={item}
+                    disabled={disabled}
+                    onRemove={() => onRemove(item)}
+                    style={{ width: '100%', aspectRatio: Math.min(Math.max(ratio, 0.8), 1.9) }}
+                />
+            </View>
+        );
+    }
+
+    // Số lẻ: ô đầu tiên chiếm cả hàng, còn lại chia 2 cột
+    const isOdd = media.length % 2 === 1;
+    return (
+        <View style={[styles.mediaGrid, styles.mediaGridWrap]}>
+            {media.map((item, index) => (
+                <MediaTile
+                    key={`${item.type}_${item.uri}_${item.index}`}
+                    media={item}
+                    disabled={disabled}
+                    onRemove={() => onRemove(item)}
+                    style={isOdd && index === 0 ? styles.mediaTileFull : styles.mediaTileHalf}
+                />
+            ))}
+        </View>
+    );
+};
+
+const PrivacySheet = ({ visible, value, onSelect, onClose }) => (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+        <Pressable style={styles.sheetBackdrop} onPress={onClose}>
+            <Pressable style={styles.sheet}>
+                <View style={styles.sheetHandle} />
+                <Text style={styles.sheetTitle}>Ai có thể xem bài viết của bạn?</Text>
+                {PRIVACY_OPTIONS.map(option => {
+                    const selected = option.value === value;
+                    return (
+                        <TouchableOpacity key={option.label} style={styles.sheetOption} onPress={() => onSelect(option.value)}>
+                            <View style={[styles.sheetOptionIcon, selected && styles.sheetOptionIconActive]}>
+                                <Ionicons name={option.icon} size={20} color={selected ? '#0866FF' : '#050505'} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.sheetOptionLabel}>{option.label}</Text>
+                                <Text style={styles.sheetOptionDesc}>{option.description}</Text>
+                            </View>
+                            <Ionicons
+                                name={selected ? 'radio-button-on' : 'radio-button-off'}
+                                size={22}
+                                color={selected ? '#0866FF' : '#BCC0C4'}
+                            />
+                        </TouchableOpacity>
+                    );
+                })}
+            </Pressable>
+        </Pressable>
+    </Modal>
+);
 
 const PostCreate = ({ onClose, item, onSuccess }) => {
     const [SOCIAL_CONFIG, SET_SOCIAL_CONFIG] = React.useState({ url: '', user: {} });
@@ -36,10 +154,10 @@ const PostCreate = ({ onClose, item, onSuccess }) => {
         fetchConfig();
     }, []);
 
-    const { lang } = useLang();
     const { state } = useGlobal();
     const { profile } = state;
     const [isSubmit, setIsSubmit] = React.useState(false);
+    const [showPrivacy, setShowPrivacy] = React.useState(false);
     const [formItem, setFormItem] = React.useState({
         title: item.title ?? profile.fullname ?? '',
         images: item.images ?? [],
@@ -50,15 +168,14 @@ const PostCreate = ({ onClose, item, onSuccess }) => {
 
     const richText = React.useRef(null);
 
-    const onChangePrivacy = () => {
-        setFormItem(prev => ({ ...prev, privacy: !prev.privacy }));
-    };
-    const allowSubmit = React.useMemo(() => {
-        return formItem.description
-            .replace(/<(.|\n)*?>/g, '')
-            .replace(/&nbsp;/g, ' ')
-            .trim() !== '';
-    }, [formItem.description]);
+    const onSelectPrivacy = React.useCallback((privacy) => {
+        setFormItem(prev => ({ ...prev, privacy }));
+        setShowPrivacy(false);
+    }, []);
+
+    const plainText = React.useMemo(() => stripHtml(formItem.description), [formItem.description]);
+    const allowSubmit = plainText !== '';
+    const canPost = allowSubmit && !!SOCIAL_CONFIG.url && !isSubmit;
 
     const pickImage = React.useCallback(async () => {
         const result = await ImagePicker.launchImageLibraryAsync({
@@ -81,12 +198,9 @@ const PostCreate = ({ onClose, item, onSuccess }) => {
         }
     }, []);
 
-    const removeImage = React.useCallback((index) => {
-        setFormItem(prev => ({ ...prev, images: prev.images.filter((_, i) => i !== index) }));
-    }, []);
-
-    const removeVideo = React.useCallback((index) => {
-        setFormItem(prev => ({ ...prev, videos: prev.videos.filter((_, i) => i !== index) }));
+    const removeMedia = React.useCallback((media) => {
+        const key = media.type === 'video' ? 'videos' : 'images';
+        setFormItem(prev => ({ ...prev, [key]: prev[key].filter((_, i) => i !== media.index) }));
     }, []);
 
     const onSubmit = React.useCallback(async () => {
@@ -147,9 +261,24 @@ const PostCreate = ({ onClose, item, onSuccess }) => {
         onClose(formItem);
     }, [formItem, onClose]);
 
-    const mediaCount = formItem.images.length + formItem.videos.length;
+    const media = React.useMemo(() => [
+        ...formItem.videos.map((v, index) => ({ ...v, type: 'video', index })),
+        ...formItem.images.map((img, index) => ({ ...img, type: 'image', index })),
+    ], [formItem.images, formItem.videos]);
 
-    if (!formItem) return null;
+    const largeText = media.length === 0 && plainText.length < LARGE_TEXT_LIMIT;
+    const editorStyle = React.useMemo(() => ({
+        color: '#050505',
+        placeholderColor: '#65676B',
+        caretColor: '#0866FF',
+        contentCSSText: largeText
+            ? 'font-size: 24px; line-height: 1.3; padding: 0;'
+            : 'font-size: 16px; line-height: 1.4; padding: 0;',
+    }), [largeText]);
+
+    const privacyOption = PRIVACY_OPTIONS.find(o => o.value === formItem.privacy) ?? PRIVACY_OPTIONS[0];
+    const displayName = profile.fullname || SOCIAL_CONFIG.user?.name || 'Bạn';
+
     return (
         <Modal
             animationType="slide"
@@ -157,84 +286,91 @@ const PostCreate = ({ onClose, item, onSuccess }) => {
             statusBarTranslucent
             visible
             onRequestClose={onExit}>
-            <View style={[styles.centeredView, { paddingBottom: 50 }]}>
-                <View style={[styles.headerDetailForm, { backgroundColor: '#e9e9e9' }]}>
-                    <View style={styles.leftHeaderDetailButton}>
-                        <Ionicons name="close-outline" size={30} color="gray" style={styles.searchIcon} onPress={onExit} />
-                    </View>
-                    <TouchableOpacity style={styles.centerHeaderDetailButton} onPress={onChangePrivacy}>
-                        <Ionicons name={formItem.privacy ? "lock-closed" : "people"} size={14} color={formItem.privacy ? "#007AFF" : "gray"} />
-                        <Text style={[styles.headerText, { color: formItem.privacy ? "#007AFF" : "gray" }]}>{formItem.privacy ? "Chỉ mình tôi" : "Tất cả bạn bè"} ▾</Text>
+            <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+                {/* Header */}
+                <View style={styles.header}>
+                    <TouchableOpacity style={styles.headerSide} onPress={onExit} hitSlop={10}>
+                        <Ionicons name="close" size={28} color="#050505" />
                     </TouchableOpacity>
-                    <View style={styles.rightHeaderDetailButton}>
-                        {!isSubmit && (
-                            <TouchableOpacity onPress={onSubmit} disabled={!allowSubmit || !SOCIAL_CONFIG.url}>
-                                <Ionicons
-                                    name="send"
-                                    size={30}
-                                    color={allowSubmit && SOCIAL_CONFIG.url ? '#007AFF' : 'gray'}
-                                    style={styles.searchIcon}
-                                />
-                            </TouchableOpacity>
-                        )}
-                        {isSubmit && (
-                            <ActivityIndicator size="small" color="#007AFF" />
-                        )}
+                    <Text style={styles.headerTitle}>{item.blog_id ? 'Chỉnh sửa bài viết' : 'Tạo bài viết'}</Text>
+                    <View style={[styles.headerSide, { alignItems: 'flex-end' }]}>
+                        <TouchableOpacity
+                            style={[styles.postButton, !canPost && styles.postButtonDisabled]}
+                            onPress={onSubmit}
+                            disabled={!canPost}>
+                            {isSubmit
+                                ? <ActivityIndicator size="small" color="#fff" />
+                                : <Text style={[styles.postButtonText, !canPost && styles.postButtonTextDisabled]}>
+                                    {item.blog_id ? 'Lưu' : 'Đăng'}
+                                </Text>}
+                        </TouchableOpacity>
                     </View>
                 </View>
-                <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scrollContent}>
-                    <View style={styles.editorCard}>
-                        <RichEditor
-                            ref={richText}
-                            placeholder="Bạn đang nghĩ gì?"
-                            style={styles.richEditor}
-                            initialHeight={260}
-                            initialContentHTML={formItem.description}
-                            onChange={(value) => {
-                                setFormItem(prev => ({ ...prev, description: value }));
-                            }}
-                        />
-                    </View>
-                    <View style={styles.actionRow}>
-                        <TextButton icon="videocam" text="Video" onPress={pickVideo} color="#E91E63" disabled={isSubmit} />
-                        <TextButton icon="images" text="Ảnh" onPress={pickImage} color="#4CAF50" disabled={isSubmit} />
+
+                <ScrollView
+                    style={{ flex: 1 }}
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={styles.scrollContent}>
+                    {/* Thông tin người đăng */}
+                    <View style={styles.authorRow}>
+                        {profile.avatar
+                            ? <CustomImage source={{ uri: profile.avatar }} style={styles.avatar} />
+                            : <CustomImage source={AccountImage} style={styles.avatar} />}
+                        <View style={styles.authorInfo}>
+                            <Text style={styles.authorName} numberOfLines={1}>{displayName}</Text>
+                            <TouchableOpacity
+                                style={styles.privacyChip}
+                                onPress={() => setShowPrivacy(true)}
+                                disabled={isSubmit}>
+                                <Ionicons name={privacyOption.icon} size={12} color="#0866FF" />
+                                <Text style={styles.privacyChipText}>{privacyOption.label}</Text>
+                                <Ionicons name="caret-down" size={10} color="#0866FF" />
+                            </TouchableOpacity>
+                        </View>
                     </View>
 
-                    <View style={styles.mediaHeader}>
-                        <Text style={styles.mediaHeaderText}>Tệp đính kèm ({mediaCount})</Text>
-                    </View>
+                    {/* Nội dung */}
+                    <RichEditor
+                        ref={richText}
+                        placeholder={`${displayName.split(' ').pop()} ơi, bạn đang nghĩ gì thế?`}
+                        style={styles.richEditor}
+                        editorStyle={editorStyle}
+                        initialHeight={media.length ? 100 : 220}
+                        initialContentHTML={formItem.description}
+                        disabled={isSubmit}
+                        onChange={(value) => {
+                            setFormItem(prev => ({ ...prev, description: value }));
+                        }}
+                    />
 
-                    <View style={styles.imageGrid}>
-                        {mediaCount === 0 && (
-                            <Text style={styles.emptyMediaText}>Chưa có ảnh hoặc video nào được chọn.</Text>
-                        )}
-                        {formItem.videos.map((item, index) => (
-                            <View key={`${item.uri}_${index}`} style={styles.videoThumbContainer}>
-                                <TouchableOpacity style={styles.closeButton} onPress={() => removeVideo(index)}>
-                                    <Ionicons name="close" size={25} color="#ccc" />
-                                </TouchableOpacity>
-                                <VideoPlayerUI uri={item.uri} isPlay={true} height={120} />
-                            </View>
-                        ))}
-                        {formItem.images.map((item, index) => (
-                            <View key={`${item.uri}_${index}`} style={styles.imageThumbContainer}>
-                                <TouchableOpacity style={styles.closeButton} onPress={() => removeImage(index)}>
-                                    <Ionicons name="close" size={25} color="#ccc" />
-                                </TouchableOpacity>
-                                {item.uri && (
-                                    <Image
-                                        source={{ uri: item.uri }}
-                                        style={styles.imageThumb}
-                                    />
-                                )}
-
-                            </View>
-                        ))}
-                    </View>
+                    {/* Ảnh / video đính kèm */}
+                    <MediaGrid media={media} onRemove={removeMedia} disabled={isSubmit} />
                 </ScrollView>
-            </View>
+
+                {/* Thêm vào bài viết */}
+                <View style={styles.footer}>
+                    <View style={styles.addBar}>
+                        <Text style={styles.addBarLabel}>Thêm vào bài viết của bạn</Text>
+                        <View style={styles.addBarIcons}>
+                            <TouchableOpacity style={styles.addIcon} onPress={pickImage} disabled={isSubmit} hitSlop={6}>
+                                <Ionicons name="images" size={24} color={isSubmit ? '#BCC0C4' : '#45BD62'} />
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.addIcon} onPress={pickVideo} disabled={isSubmit} hitSlop={6}>
+                                <Ionicons name="videocam" size={26} color={isSubmit ? '#BCC0C4' : '#F02849'} />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </KeyboardAvoidingView>
+
+            <PrivacySheet
+                visible={showPrivacy}
+                value={formItem.privacy}
+                onSelect={onSelectPrivacy}
+                onClose={() => setShowPrivacy(false)}
+            />
         </Modal>
     );
 };
 
-export default PostCreate;  
+export default PostCreate;

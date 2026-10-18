@@ -164,11 +164,6 @@ const HomeScreen = ({ navigation, route }) => {
     if (forceLoggedOutRef.current) return;
     forceLoggedOutRef.current = true;
     disconnectIO();
-    try {
-      RNCallKeep.endAllCalls();
-    } catch (error) {
-      console.warn('endAllCalls failed', error);
-    }
     clearItem(USER_TOKEN_KEY);
     clearItem(WALLET_STORAGE_TOKEN_KEY);
     dispatch({ type: 'SET_IO', payload: null });
