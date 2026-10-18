@@ -1,5 +1,6 @@
 package com.ktsgroup.aioglobal
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 
@@ -17,6 +18,13 @@ class MainActivity : ReactActivity() {
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
     super.onCreate(null)
+    // Started for an answered call while the phone is locked.
+    if (CallLockScreen.active) CallLockScreen.show(this)
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    if (CallLockScreen.active) CallLockScreen.show(this)
   }
 
   /**

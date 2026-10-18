@@ -2,6 +2,7 @@ import { registerRootComponent } from 'expo';
 import { Platform } from 'react-native';
 import App from './App';
 import {
+    bringCallToForeground,
     cacheIncomingCall,
     clearCachedCall,
     displayIncomingVideoCall,
@@ -9,6 +10,7 @@ import {
     isValidCallUUID,
     notifyIncomingAnswer,
     persistVoipToken,
+    releaseCallLockScreen,
     setAudioSessionActive,
 } from './src/components/call/voip';
 
@@ -68,15 +70,9 @@ const callKeepOptions = {
 
 const answerIncomingCall = ({ callUUID }) => {
     const call = getCachedCall(callUUID) || { uuid: callUUID };
-    // Android doesn't open the app on answer. Bring it up so the call screen (and the
-    // camera/microphone permission prompt, which needs an Activity) can be shown.
-    if (Platform.OS === 'android' && RNCallKeep) {
-        try {
-            RNCallKeep.backToForeground();
-        } catch (e) {
-            console.warn('RNCallKeep.backToForeground failed:', e);
-        }
-    }
+    // Android doesn't open the app on answer. Bring it up (over the lock screen) so the call
+    // screen and the camera/microphone permission prompt, which needs an Activity, can be shown.
+    bringCallToForeground(RNCallKeep);
     notifyIncomingAnswer(call);
 };
 
@@ -100,6 +96,7 @@ const handleCallKeepEvents = (events) => {
         }
         if (event?.name === 'RNCallKeepPerformEndCallAction' && event.data?.callUUID) {
             clearCachedCall(event.data.callUUID);
+            releaseCallLockScreen();
         }
     });
 };
@@ -122,6 +119,7 @@ if (RNCallKeep) {
         RNCallKeep.addEventListener('answerCall', answerIncomingCall);
         RNCallKeep.addEventListener('endCall', ({ callUUID }) => {
             clearCachedCall(callUUID);
+            releaseCallLockScreen();
         });
         RNCallKeep.addEventListener('didDisplayIncomingCall', (data) => {
             cacheIncomingCall({

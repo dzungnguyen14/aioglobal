@@ -23,7 +23,7 @@ import { useGlobal } from '../state/global';
 import { endCall } from '../components/home/zoom/api';
 import { TabRoute } from './home';
 import RNCallKeep from 'react-native-callkeep';
-import { waitForCallAudioSession } from '../components/call/voip';
+import { releaseCallLockScreen, waitForCallAudioSession } from '../components/call/voip';
 import CallLoading from '../components/call/CallLoading';
 import { useLang } from '../shared/hooks';
 
@@ -190,6 +190,9 @@ export default function LiveKitScreen({ route, navigation }) {
       AudioSession.stopAudioSession();
     };
   }, [callUUID]);
+
+  // Call screen closed: the app must no longer show over the lock screen.
+  useEffect(() => releaseCallLockScreen, []);
   
 
   if (!token || !wsURL) return null;

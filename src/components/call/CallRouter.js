@@ -5,7 +5,7 @@ import { useGlobal } from '../../state/global';
 import { useLang } from '../../shared/hooks';
 import { ensureCallPermissionsAndroid } from '../../shared/permissions';
 import { answerCall, endCall, getWebviewURL } from '../home/zoom/api';
-import { parseCallDeepLink, subscribeIncomingAnswer } from './voip';
+import { parseCallDeepLink, releaseCallLockScreen, subscribeIncomingAnswer } from './voip';
 import CallLoading from './CallLoading';
 
 // Keeps the loader up while the LiveKit screen slides in.
@@ -22,6 +22,7 @@ async function waitUntil(predicate, tries = 20, delay = 150) {
 }
 
 function endCallKeepCall(call) {
+  releaseCallLockScreen();
   try {
     if (call?.uuid) RNCallKeep.endCall(call.uuid);
   } catch (error) {

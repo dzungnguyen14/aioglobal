@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 import uuid from 'react-native-uuid';
 import { getItem, setItem } from '../../shared/utils';
 import { VOIP_TOKEN_KEY } from '../../shared/constant';
@@ -188,6 +188,31 @@ export function notifyIncomingAnswer(call) {
     return;
   }
   answerListeners.forEach((listener) => listener(cached));
+}
+
+// Android: open the app over the lock screen (and ask to unlock) once a call is answered, so
+// React resumes and the call is joined right away instead of after the phone is unlocked.
+export function bringCallToForeground(RNCallKeep) {
+  if (Platform.OS !== 'android') return;
+  try {
+    if (NativeModules.CallLockScreen) {
+      NativeModules.CallLockScreen.bringToForeground();
+    } else if (RNCallKeep) {
+      RNCallKeep.backToForeground();
+    }
+  } catch (e) {
+    console.warn('bringCallToForeground failed:', e);
+  }
+}
+
+// Android: stop showing the app over the lock screen once the call is over.
+export function releaseCallLockScreen() {
+  if (Platform.OS !== 'android') return;
+  try {
+    NativeModules.CallLockScreen?.release();
+  } catch (e) {
+    console.warn('releaseCallLockScreen failed:', e);
+  }
 }
 
 export function isIOS() {
