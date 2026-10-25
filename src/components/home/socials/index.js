@@ -1,5 +1,5 @@
 import React , { useEffect, useRef, useState, memo } from 'react';
-import { View, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity, Text, Linking } from 'react-native';
+import { View, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity, Text, Linking, Alert } from 'react-native';
 import styles from './style';
 import Post from './post';
 import { fetchSocial, getConfigSocial, getSocialsPosts, uploadAvatar, uploadCover } from '../../../fetcher/api';
@@ -10,6 +10,7 @@ import HomeHeader from '../components/header';
 import { useActionSheet } from '@expo/react-native-action-sheet';
 import useConfirmDialog from '../../confirm';
 import { setItem } from '../../../shared/utils';
+import { USER_TOKEN_KEY } from '../../../shared/constant';
 import { Ionicons } from '@expo/vector-icons';
 import { useGlobal } from '../../../state/global';
 import { Modal } from 'react-native-paper';
@@ -59,7 +60,7 @@ const SocialDashboard = ({ profile, navigation, toggleOS }) => {
     }
 
     const loadMore = async () => {
-        setLoadingMore(true);rrr
+        setLoadingMore(true);
         setFilter(prev => ({ ...prev, page: prev.page + 1 }))
     }
     
@@ -170,20 +171,22 @@ const SocialDashboard = ({ profile, navigation, toggleOS }) => {
         setShowProfile(true);
     }
 
-    const onUpdateAvatar = async (file) => {
-        const { image, result } = await uploadAvatar(file, profile.token);
-        if (result) {
-            dispatch({ type: 'SET_PROFILE', payload: { ...profile, avatar: image } });
-            await setItem(USER_TOKEN_KEY, JSON.stringify(profile));
+    const saveUploadedImage = async (response, field) => {
+        const { image, result, msg } = response;
+        if (!result) {
+            Alert.alert('Lỗi', msg || 'Không thể cập nhật ảnh. Vui lòng thử lại.');
+            return false;
         }
+        const newProfile = { ...profile, [field]: image };
+        dispatch({ type: 'SET_PROFILE', payload: newProfile });
+        await setItem(USER_TOKEN_KEY, JSON.stringify(newProfile));
+        // Lấy lại SOCIAL_CONFIG.user để mở lại profile thấy ảnh mới
+        onGetConfig();
+        return true;
     }
-    const onUpdateCover = async (file) => {
-        const { image, result } = await uploadCover(file, profile.token);
-        if (result) {
-            dispatch({ type: 'SET_PROFILE', payload: { ...profile, coverPhoto: image } });
-            await setItem(USER_TOKEN_KEY, JSON.stringify(profile));
-        }
-    }
+
+    const onUpdateAvatar = async (file) => saveUploadedImage(await uploadAvatar(file, profile.token), 'avatar');
+    const onUpdateCover = async (file) => saveUploadedImage(await uploadCover(file, profile.token), 'coverPhoto');
 
     return (
         <View style={styles.container}>

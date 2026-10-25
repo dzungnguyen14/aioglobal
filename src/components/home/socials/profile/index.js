@@ -39,6 +39,8 @@ const ProfilePage = ({ onClose, profile, SOCIAL_CONFIG, userProfile, navigation,
     const isFetchingRef = useRef(false);
     const [pendingCoverImage, setPendingCoverImage] = useState(null);
     const [pendingAvatarImage, setPendingAvatarImage] = useState(null);
+    const [uploadingType, setUploadingType] = useState(null);
+    const isOwner = !!userProfile.user_id && userProfile.user_id === SOCIAL_CONFIG?.user?.user_id;
 
     const loadPosts = useCallback(async (pageNumber) => {
         if (isFetchingRef.current || !hasMore) return;
@@ -136,14 +138,19 @@ const ProfilePage = ({ onClose, profile, SOCIAL_CONFIG, userProfile, navigation,
                         setPendingCoverImage(imageUri);
                     }
 
+                    const setPending = isAvatar ? setPendingAvatarImage : setPendingCoverImage;
+                    const onUpdate = isAvatar ? onUpdateAvatar : onUpdateCover;
+                    setUploadingType(type);
                     try {
-                        if (isAvatar && typeof onUpdateAvatar === 'function') {
-                            onUpdateAvatar(file);
-                        } else if (!isAvatar && typeof onUpdateCover === 'function') {
-                            onUpdateCover(file);
+                        const success = typeof onUpdate === 'function' && await onUpdate(file);
+                        if (!success) {
+                            setPending(null);
                         }
                     } catch (error) {
+                        setPending(null);
                         Alert.alert('Lỗi', 'Không thể cập nhật ảnh. Vui lòng thử lại.');
+                    } finally {
+                        setUploadingType(null);
                     }
                 }
             }
@@ -151,9 +158,13 @@ const ProfilePage = ({ onClose, profile, SOCIAL_CONFIG, userProfile, navigation,
     };
 
     const handlePickImage = async (type) => {
+        if (uploadingType) return;
+        const isAvatar = type === 'avatar';
         let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 0.8
+            mediaTypes: ['images'],
+            allowsEditing: isAvatar,
+            aspect: isAvatar ? [1, 1] : undefined,
+            quality: 1
         });
 
         if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -179,12 +190,17 @@ const ProfilePage = ({ onClose, profile, SOCIAL_CONFIG, userProfile, navigation,
                     <Ionicons name="close" size={24} color="#fff" />
                 </TouchableOpacity>
                 {/* Button to upload cover photo - now opens image picker directly */}
-                <Pressable
-                    style={styles.editCoverButton}
-                    onPress={() => handlePickImage('cover')}
-                >
-                    <Ionicons name="pencil" size={14} color="#fff" />
-                </Pressable>
+                {isOwner && (
+                    <Pressable
+                        style={styles.editCoverButton}
+                        onPress={() => handlePickImage('cover')}
+                        disabled={!!uploadingType}
+                    >
+                        {uploadingType === 'cover'
+                            ? <ActivityIndicator size="small" color="#fff" />
+                            : <Ionicons name="pencil" size={14} color="#fff" />}
+                    </Pressable>
+                )}
             </View>
             {/* Profile Info */}
             <View style={styles.profileInfo}>
@@ -198,16 +214,22 @@ const ProfilePage = ({ onClose, profile, SOCIAL_CONFIG, userProfile, navigation,
                             <Ionicons name="checkmark-circle" size={20} color="#1DA1F2" />
                         </View>
                     )}
-                    <Pressable
-                        style={styles.editAvatarButton}
-                        onPress={() => handlePickImage('avatar')}
-                    >
-                        <Ionicons name="pencil" size={14} color="#fff" />
-                    </Pressable>
+                    {isOwner && (
+                        <Pressable
+                            style={styles.editAvatarButton}
+                            onPress={() => handlePickImage('avatar')}
+                            disabled={!!uploadingType}
+                        >
+                            {uploadingType === 'avatar'
+                                ? <ActivityIndicator size="small" color="#fff" />
+                                : <Ionicons name="pencil" size={14} color="#fff" />}
+                        </Pressable>
+                    )}
                 </View>
                 <View style={styles.userInfo}>
                     <Text style={styles.userName}>{userProfile.username}</Text>
                     {/* Action Buttons */}
+                    {!isOwner && (
                     <View style={[styles.actionButtons, { marginTop: 10 }]}>
                         <TouchableOpacity
                             style={[styles.followButton, isFollowing && styles.followingButton]}
@@ -231,6 +253,7 @@ const ProfilePage = ({ onClose, profile, SOCIAL_CONFIG, userProfile, navigation,
                             <Text style={[styles.messageButtonText, { color: 'red' }]}>Chặn</Text>
                         </TouchableOpacity>
                     </View>
+                    )}
                 </View>
             </View>
         </View>

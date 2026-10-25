@@ -1,5 +1,6 @@
 import { API_HOST } from "../shared/constant";
 import axios from "axios";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 
 // Configure axios interceptors
 axios.interceptors.request.use(request => request);
@@ -155,26 +156,46 @@ const createFormData = (file, prefix) => {
 };
 
 export const uploadIdentityPhoto = async (file, token) => {
-    const formData = createFormData(file, 'vneid');
-    return makeRequest('post', `${API_HOST}/app/upload_vneid`, formData, token, 10000, true);
+    const formData = await createResizedImageFormData(file, 'vneid', 1600);
+    return makeFormRequest(`${API_HOST}/app/upload_vneid`, formData, token, 60000);
+};
+
+// Resize (cạnh dài tối đa maxSize) và chuyển sang JPEG trước khi upload.
+// file: asset của expo-image-picker hoặc chuỗi uri.
+const createResizedImageFormData = async (file, prefix, maxSize) => {
+    const asset = typeof file === 'string' ? { uri: file } : file;
+    const timestamp = new Date().getTime();
+    let part;
+    try {
+        const context = ImageManipulator.manipulate(asset.uri);
+        const { width, height } = asset;
+        if (width && height && Math.max(width, height) > maxSize) {
+            context.resize(width >= height ? { width: maxSize } : { height: maxSize });
+        }
+        const image = await context.renderAsync();
+        const result = await image.saveAsync({ compress: 0.7, format: SaveFormat.JPEG });
+        part = { uri: result.uri, name: `${prefix}_${timestamp}.jpg`, type: 'image/jpeg' };
+    } catch (error) {
+        console.error('Resize image error:', error);
+        part = {
+            uri: asset.uri,
+            name: asset.fileName || `${prefix}_${timestamp}.jpg`,
+            type: asset.mimeType || 'image/jpeg'
+        };
+    }
+    const formData = new FormData();
+    formData.append('file', part);
+    return formData;
 };
 
 export const uploadAvatar = async (file, token) => {
-    const formData = new FormData();
-    const timestamp = new Date().getTime();
-    formData.append('file', {
-        uri: file.uri,
-        name: `${file.fileName} || ${timestamp}.jpg`,
-        type: file.mimeType
-    });
-
-    console.log("upload avatar" , `${API_HOST}/app/upload_avatar`, token);
-    return makeFormRequest(`${API_HOST}/app/upload_avatar`, formData, token, 10000, true);
+    const formData = await createResizedImageFormData(file, 'avatar', 512);
+    return makeFormRequest(`${API_HOST}/app/upload_avatar`, formData, token, 60000);
 };
 
 export const uploadCover = async (file, token) => {
-    const formData = createFormData(file, 'app_upload');
-    return makeFormRequest(`${API_HOST}/app/upload_cover`, formData, token, 10000, true);
+    const formData = await createResizedImageFormData(file, 'cover', 1600);
+    return makeFormRequest(`${API_HOST}/app/upload_cover`, formData, token, 60000);
 };
 
 export const uploadPhoto = async (file, token) => {

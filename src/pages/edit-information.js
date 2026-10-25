@@ -27,15 +27,26 @@ function EditInformationScreen({ navigation }) {
 
     const pickImage = async () => {
         let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.All,
+            mediaTypes: ['images'],
             allowsEditing: true,
-            quality: 0.4,
+            aspect: [1, 1],
+            quality: 1,
         });
 
-        if (!result.canceled) {
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+            const previousImage = image;
             setImage(result.assets[0].uri);
-            await uploadAvatar(result.assets[0].uri, profile.token);
-            Alert.alert(lang.success);
+            const resp = await uploadAvatar(result.assets[0], profile.token);
+            if (resp.result) {
+                setImage(resp.image);
+                const newProfile = { ...profile, avatar: resp.image };
+                dispatch({ type: 'SET_PROFILE', payload: newProfile });
+                await setProfile(newProfile);
+                Alert.alert(lang.success);
+            } else {
+                setImage(previousImage);
+                Alert.alert(lang.error, resp.msg);
+            }
         }
     };
 
