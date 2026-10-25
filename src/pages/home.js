@@ -3,12 +3,10 @@ import { useEffect, useMemo, useState, useCallback, useRef, createContext, useCo
 import styles from "../styles/global";
 import HomeWidget from "../components/home/widget";
 import HomeProfile from "../components/home/account";
-import HomeNewfeed from "../components/home/newfeed";
 import HomeProduct from "../components/home/product";
 import SocialDashboard from "../components/home/socials";
 import EcommerceLoading from "../components/home/ecommerce/loading";
-import HomeNewfeedOld from "../components/home/newfeed-old";
-import { useLang, useGetDeviceInfo, useProfile } from "../shared/hooks";
+import { useLang, useGetDeviceInfo } from "../shared/hooks";
 import { APP_VERSION } from "../constants/home";
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from '@expo/vector-icons/Ionicons';

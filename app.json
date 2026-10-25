@@ -19,7 +19,7 @@
     "ios": {
       "bundleIdentifier": "com.ktsgroup.aioglobal",
       "supportsTablet": false,
-      "buildNumber": "108",
+      "buildNumber": "110",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Ứng dụng cần quyền dùng camera cho video call",
