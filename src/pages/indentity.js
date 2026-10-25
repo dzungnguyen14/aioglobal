@@ -37,20 +37,29 @@ function IdentityScreen({ navigation, route }) {
     const [loading, setLoading] = useState(true);
 
     const pickImage = async () => {
+        if (uploading) return;
         let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.All,
+            mediaTypes: ['images'],
             allowsEditing: true,
-            quality: 0.4,
+            quality: 1,
         });
 
-        if (!result.canceled) {
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+            const previousImage = image;
             setUploading(true);
             setImage(result.assets[0].uri);
             try {
-                await uploadIdentityPhoto(result.assets[0].uri, profile.token);
-                Alert.alert(lang.success);
+                // uploadIdentityPhoto không throw khi lỗi mạng/HTTP mà trả về { success: false, msg }
+                const resp = await uploadIdentityPhoto(result.assets[0], profile.token);
+                if (!resp || resp.success === false || resp.result === false) {
+                    setImage(previousImage);
+                    Alert.alert(lang.error, resp?.msg || "Upload failed. Please try again.");
+                } else {
+                    Alert.alert(lang.success);
+                }
             } catch {
-                Alert.alert("Error", "Upload failed. Please try again.");
+                setImage(previousImage);
+                Alert.alert(lang.error, "Upload failed. Please try again.");
             } finally {
                 setUploading(false);
             }

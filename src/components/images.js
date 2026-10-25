@@ -67,9 +67,10 @@ export const AutoImage = ({ uri }) => {
     );
 }
 export const CustomImage = ({ source, style }) => {
+    // Image của react-native không nhận chuỗi URL, phải bọc thành { uri }
     return (
         <Image
-            source={source}
+            source={typeof source === 'string' ? { uri: source } : source}
             style={style}
             contentFit="cover"
             allowDownscaling
