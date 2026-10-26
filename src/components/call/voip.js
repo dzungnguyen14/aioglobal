@@ -6,6 +6,9 @@ import { VOIP_TOKEN_KEY } from '../../shared/constant';
 export const CALL_SCHEME = 'exp+aioglobal://livekit';
 
 const incomingCalls = new Map();
+// meetingId -> time its call ended here. A late push for that meeting must not ring again.
+const endedMeetings = new Map();
+const ENDED_MEETING_TTL_MS = 10 * 60 * 1000;
 const voipTokenListeners = new Set();
 const answerListeners = new Set();
 
@@ -91,8 +94,29 @@ export function getCachedCall(callUUID) {
   return incomingCalls.get(String(callUUID).toLowerCase()) || incomingCalls.get(callUUID) || null;
 }
 
+function findCallByMeeting(meetingId) {
+  if (!meetingId) return null;
+  for (const call of incomingCalls.values()) {
+    if (String(call.meetingId) === String(meetingId)) return call;
+  }
+  return null;
+}
+
+function isMeetingEnded(meetingId) {
+  if (!meetingId) return false;
+  const endedAt = endedMeetings.get(String(meetingId));
+  if (!endedAt) return false;
+  if (Date.now() - endedAt > ENDED_MEETING_TTL_MS) {
+    endedMeetings.delete(String(meetingId));
+    return false;
+  }
+  return true;
+}
+
 export function clearCachedCall(callUUID) {
   if (!callUUID) return;
+  const call = getCachedCall(callUUID);
+  if (call?.meetingId) endedMeetings.set(String(call.meetingId), Date.now());
   incomingCalls.delete(String(callUUID).toLowerCase());
   incomingCalls.delete(callUUID);
 }
@@ -140,6 +164,14 @@ export function parseCallDeepLink(url) {
 
 export function displayIncomingVideoCall(RNCallKeep, raw) {
   if (!RNCallKeep) return null;
+  // The same call can be pushed more than once (Android holds pushes while the phone is locked
+  // and delivers them on unlock). The payload has no uuid, so each push would ring a second
+  // Telecom call that can't be answered; reuse the one already shown instead.
+  const { meetingId } = parseCallPayload(raw);
+  if (isMeetingEnded(meetingId)) return null;
+  const shown = findCallByMeeting(meetingId);
+  if (shown) return cacheIncomingCall({ ...raw, uuid: shown.uuid });
+
   const call = cacheIncomingCall(raw);
   RNCallKeep.displayIncomingCall(
     call.uuid,
