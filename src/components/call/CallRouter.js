@@ -4,14 +4,22 @@ import RNCallKeep from 'react-native-callkeep';
 import { useGlobal } from '../../state/global';
 import { useLang } from '../../shared/hooks';
 import { ensureCallPermissionsAndroid } from '../../shared/permissions';
-import { answerCall, endCall, getWebviewURL } from '../home/zoom/api';
-import { parseCallDeepLink, releaseCallLockScreen, subscribeIncomingAnswer } from './voip';
+import { answerCall, getWebviewURL } from '../home/zoom/api';
+import {
+  parseCallDeepLink,
+  releaseCallLockScreen,
+  reportCallEnded,
+  subscribeCallEnded,
+  subscribeIncomingAnswer,
+} from './voip';
 import CallLoading from './CallLoading';
 
 // Keeps the loader up while the LiveKit screen slides in.
 const HIDE_LOADING_DELAY_MS = 400;
 // Safety net so a hung request never leaves the loader covering the app.
 const MAX_LOADING_MS = 60000;
+// A call ended before the session was restored is still reported once it is, if this recent.
+const MAX_PENDING_END_MS = 60000;
 
 async function waitUntil(predicate, tries = 20, delay = 150) {
   for (let i = 0; i < tries; i += 1) {
@@ -34,6 +42,7 @@ export default function CallRouter({ navigationRef }) {
   const { state } = useGlobal();
   const { lang } = useLang();
   const pendingRef = useRef(null);
+  const pendingEndsRef = useRef([]);
   const joiningRef = useRef(false);
   const [loading, setLoading] = useState(false);
   // Refs so joinCall keeps its identity (re-creating it re-reads the initial deep link).
@@ -63,10 +72,10 @@ export default function CallRouter({ navigationRef }) {
       // Before answer_call, so the caller isn't told we picked up a call we can't join.
       const granted = await ensureCallPermissionsAndroid(langRef.current);
       if (!granted) {
+        // Reported here first; the endCall event fired by endCallKeepCall is then skipped.
+        const reported = reportCallEnded(call, token);
         endCallKeepCall(call);
-        if (call.counterpartId) {
-          await endCall({ meeting_id: call.meetingId, user_id: call.counterpartId }, token);
-        }
+        await reported;
         return;
       }
 
@@ -88,6 +97,7 @@ export default function CallRouter({ navigationRef }) {
           wsURL: livekit.wsURL,
           calleeID: call.counterpartId,
           callUUID: call.uuid,
+          meetingId: call.meetingId,
         });
         hideDelay = HIDE_LOADING_DELAY_MS;
       }
@@ -143,6 +153,28 @@ export default function CallRouter({ navigationRef }) {
   }, [loading, navigationRef]);
 
   useEffect(() => subscribeIncomingAnswer(joinCall), [joinCall]);
+
+  useEffect(() => subscribeCallEnded((call) => {
+    const token = tokenRef.current;
+    if (!token) {
+      // Woken up by the call: send it once Middleware restores the session.
+      pendingEndsRef.current.push(call);
+      return;
+    }
+    reportCallEnded(call, token).catch((error) => console.warn('reportCallEnded failed', error));
+  }), []);
+
+  useEffect(() => {
+    const token = state.profile?.token;
+    if (!token || !pendingEndsRef.current.length) return;
+    const queued = pendingEndsRef.current;
+    pendingEndsRef.current = [];
+    queued
+      .filter((call) => Date.now() - (call.endedAt || 0) < MAX_PENDING_END_MS)
+      .forEach((call) => {
+        reportCallEnded(call, token).catch((error) => console.warn('reportCallEnded failed', error));
+      });
+  }, [state.profile?.token]);
 
   useEffect(() => {
     const openFromUrl = (url) => {

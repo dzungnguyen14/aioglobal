@@ -2,6 +2,7 @@ import { NativeModules, Platform } from 'react-native';
 import uuid from 'react-native-uuid';
 import { getItem, setItem } from '../../shared/utils';
 import { VOIP_TOKEN_KEY } from '../../shared/constant';
+import { endCall } from '../home/zoom/api';
 
 export const CALL_SCHEME = 'exp+aioglobal://livekit';
 
@@ -11,6 +12,15 @@ const endedMeetings = new Map();
 const ENDED_MEETING_TTL_MS = 10 * 60 * 1000;
 const voipTokenListeners = new Set();
 const answerListeners = new Set();
+const endListeners = new Set();
+// meetingIds whose end was already sent to the server. Hanging up, CallKeep's endCall event and
+// the other side's "close" can all fire for the same call; only the first one is sent.
+const reportedEnds = new Set();
+// meetingId -> when both sides were first in the LiveKit room, for the talk time sent on hang-up.
+const callStarts = new Map();
+// Socket to the call server (init-io.js); null while disconnected.
+let callSocket = null;
+const END_CALL_ACK_TIMEOUT_MS = 5000;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -220,6 +230,89 @@ export function notifyIncomingAnswer(call) {
     return;
   }
   answerListeners.forEach((listener) => listener(cached));
+}
+
+// The call was ended from CallKeep (system call UI, or RNCallKeep.endCall). Like answers, this
+// can fire on a cold start before React mounts, so buffer it for the first listener.
+let pendingEnds = [];
+
+export function subscribeCallEnded(listener) {
+  endListeners.add(listener);
+  if (pendingEnds.length) {
+    const queued = pendingEnds;
+    pendingEnds = [];
+    queued.forEach((call) => listener(call));
+  }
+  return () => endListeners.delete(listener);
+}
+
+export function notifyCallEnded(call) {
+  if (!call) return;
+  const ended = { ...call, endedAt: Date.now() };
+  if (endListeners.size === 0) {
+    pendingEnds.push(ended);
+    return;
+  }
+  endListeners.forEach((listener) => listener(ended));
+}
+
+// The server already knows this meeting is over (e.g. the other side hung up): don't send it back.
+export function markCallEndReported(meetingId) {
+  if (!meetingId) return;
+  reportedEnds.add(String(meetingId));
+  callStarts.delete(String(meetingId));
+}
+
+export function setCallSocket(socket) {
+  callSocket = socket;
+}
+
+export function getCallSocket() {
+  return callSocket;
+}
+
+// The other side is in the room: talk time starts now (only the first time counts).
+export function markCallStarted(meetingId) {
+  if (meetingId && !callStarts.has(String(meetingId))) callStarts.set(String(meetingId), Date.now());
+}
+
+// Resolves with the server's ack, or null if the socket is down or doesn't answer in time.
+function emitEndCall(payload) {
+  const socket = callSocket;
+  if (!socket?.connected) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), END_CALL_ACK_TIMEOUT_MS);
+    socket.emit('end-call', payload, (ack) => {
+      clearTimeout(timer);
+      resolve(ack || null);
+    });
+  });
+}
+
+// Hang-up: the server saves the call (talk time) and tells the other side, which ends its call.
+// Sent over the socket; the end_call API is the fallback when the socket can't deliver it.
+export async function reportCallEnded({ meetingId, counterpartId } = {}, token) {
+  if (!meetingId || !token) return null;
+  const key = String(meetingId);
+  if (reportedEnds.has(key)) return null;
+  // Marked before the request so a second path firing meanwhile is skipped.
+  reportedEnds.add(key);
+  const startedAt = callStarts.get(key);
+  callStarts.delete(key);
+  const duration = startedAt ? Math.round((Date.now() - startedAt) / 1000) : 0;
+
+  const ack = await emitEndCall({ meetingID: meetingId, counterpartID: counterpartId, duration });
+  if (ack?.ok) return { success: true, duration: ack.duration };
+  if (ack) console.warn('end-call socket failed', ack.error);
+
+  const result = await endCall({ meeting_id: meetingId, user_id: counterpartId }, token);
+  if (result?.success === false) {
+    // Let a later path retry.
+    reportedEnds.delete(key);
+    if (startedAt) callStarts.set(key, startedAt);
+    console.warn('end_call failed', result.msg);
+  }
+  return result;
 }
 
 // Android: open the app over the lock screen (and ask to unlock) once a call is answered, so

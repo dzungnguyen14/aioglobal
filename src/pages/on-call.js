@@ -3,7 +3,8 @@ import { useLang } from "../shared/hooks";
 import styles from "../styles/global";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { joinRoom, endCall, getWebviewURL, answerCall } from "../components/home/zoom/api";
+import { joinRoom, getWebviewURL, answerCall } from "../components/home/zoom/api";
+import { reportCallEnded } from "../components/call/voip";
 import { CustomImage } from "../components/images";
 import { ZOOM_API_HOST } from "../shared/constant";
 import IframeScreen from "../components/webview";
@@ -40,6 +41,7 @@ function OnCallScreen({ navigation, route }) {
     const callee = useMemo(() => {
         if (counterpart) {
             return {
+                _id: counterpart._id,
                 firstName: counterpart.firstName,
                 lastName: counterpart.lastName,
                 picture: counterpart.picture,
@@ -197,6 +199,7 @@ function OnCallScreen({ navigation, route }) {
                     token: livekit.token,
                     wsURL: livekit.wsURL,
                     calleeID: callee._id,
+                    meetingId: meeting_id,
                 });
             } else if (url) {
                 setIframeURL(url);
@@ -250,7 +253,7 @@ function OnCallScreen({ navigation, route }) {
         setIsLoading(true);
         try {
             dispatch({ type: 'SET_END_CALL', payload: false });
-            await endCall({ meeting_id: meeting_id, user_id: callee._id }, profile.token);
+            await reportCallEnded({ meetingId: meeting_id, counterpartId: callee._id }, profile.token);
 
             setIsComing(false);
             navigation.navigate('Home', { screen: TabRoute.TabContact });

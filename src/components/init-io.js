@@ -6,7 +6,14 @@ import { AppState, Linking, Platform } from 'react-native';
 import RNCallKeep from 'react-native-callkeep';
 import * as Device from 'expo-device';
 import messaging from '@react-native-firebase/messaging';
-import { displayIncomingVideoCall, getVoipToken, subscribeVoipToken } from './call/voip';
+import {
+  displayIncomingVideoCall,
+  getCallSocket,
+  getVoipToken,
+  markCallEndReported,
+  setCallSocket,
+  subscribeVoipToken,
+} from './call/voip';
 import { getDeviceGUID, getSessionLoginAt } from '../shared/device';
 import { APP_VERSION } from '../constants/home';
 
@@ -46,6 +53,7 @@ export const disconnectIO = () => {
   teardowns.forEach((teardown) => teardown());
   teardowns = [];
   if (activeIO) {
+    if (getCallSocket() === activeIO) setCallSocket(null);
     activeIO.disconnect();
     activeIO = null;
   }
@@ -81,6 +89,7 @@ const initIO = async (token, dispatch, navigation, { onForceLogout } = {}) => {
   io.on('authenticated', () => {
     console.warn('IO authenticated');
     dispatch({ type: 'SET_IO', payload: io });
+    setCallSocket(io);
   });
 
   io.on('message-in', (data) => {
@@ -132,6 +141,8 @@ const initIO = async (token, dispatch, navigation, { onForceLogout } = {}) => {
   io.on('close', (data) => {
     try {
       console.warn('close', data);
+      // The other side hung up and the server already saved the call: don't report it back.
+      markCallEndReported(data?.meetingID);
       dispatch({ type: 'SET_END_CALL', payload: true });
     } catch (error) {
       console.warn('close', error);

@@ -8,7 +8,7 @@ import {
   Text,
   Platform,
 } from 'react-native';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AudioSession,
   LiveKitRoom,
@@ -20,17 +20,35 @@ import {
 import { Track, LogLevel, setLogLevel } from 'livekit-client';
 import { Ionicons } from '@expo/vector-icons';
 import { useGlobal } from '../state/global';
-import { endCall } from '../components/home/zoom/api';
 import { TabRoute } from './home';
 import RNCallKeep from 'react-native-callkeep';
-import { releaseCallLockScreen, waitForCallAudioSession } from '../components/call/voip';
+import {
+  markCallEndReported,
+  markCallStarted,
+  releaseCallLockScreen,
+  reportCallEnded,
+  subscribeCallEnded,
+  waitForCallAudioSession,
+} from '../components/call/voip';
 import CallLoading from '../components/call/CallLoading';
 import { useLang } from '../shared/hooks';
 
 
 setLogLevel(LogLevel.debug);
 
-const RoomView = ({ navigation, profile, calleeID, callUUID }) => {
+function endCallKeep(callUUID) {
+  try {
+    if (callUUID) {
+      RNCallKeep.endCall(callUUID);
+    } else {
+      RNCallKeep.endAllCalls();
+    }
+  } catch (error) {
+    console.warn('endCall failed', error);
+  }
+}
+
+const RoomView = ({ navigation, profile, calleeID, callUUID, meetingId }) => {
   const { dispatch, state } = useGlobal();
   const tracks = useTracks([
     { source: Track.Source.Camera, withPlaceholder: true },
@@ -39,6 +57,7 @@ const RoomView = ({ navigation, profile, calleeID, callUUID }) => {
   const { localParticipant } = useLocalParticipant();
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
+  const leftRef = useRef(false);
   
   // Camera/mic are already enabled by <LiveKitRoom audio video>; enabling them again here
   // republishes the local track and leaves the overlay bound to a stale one.
@@ -55,27 +74,41 @@ const RoomView = ({ navigation, profile, calleeID, callUUID }) => {
     track.participant.identity !== localParticipant.identity
   );
 
+  // Talk time starts once the other side is in the room, not while it is still ringing.
+  useEffect(() => {
+    if (remoteTracks.length > 0) markCallStarted(meetingId);
+  }, [remoteTracks.length > 0, meetingId]);
+
+  const leaveRoom = () => {
+    if (leftRef.current) return;
+    leftRef.current = true;
+    navigation.navigate("Home", { item: profile, screen: TabRoute.TabContact });
+  };
+
+  // The other side hung up: the server already knows, so only close the call here.
   useEffect(() => {
     if (state.IS_END_CALL) {
-      navigation.navigate("Home", { item: profile });
       dispatch({ type: 'SET_END_CALL', payload: false });
+      markCallEndReported(meetingId);
+      leaveRoom();
+      endCallKeep(callUUID);
     }
   }, [state.IS_END_CALL]);
-  
-  const handleLeaveMeeting = async () => {
-    try {
-      navigation.navigate("Home", { item: profile, screen: TabRoute.TabContact });
-      if (callUUID) {
-        RNCallKeep.endCall(callUUID);
-      } else {
-        RNCallKeep.endAllCalls();
-      }
-      // await endCall({ meeting_id: FCMData.meeting_id, user_id: calleeID }, profile.token);
 
-    } catch (error) {
-      console.error('Error leaving meeting:', error);
-      navigation.navigate("Home", { item: profile })
-    }
+  // Hung up from the system call UI (CallKit / Android notification); CallRouter reports it.
+  useEffect(() => {
+    if (!callUUID) return undefined;
+    return subscribeCallEnded((call) => {
+      if (String(call?.uuid || '').toLowerCase() === String(callUUID).toLowerCase()) leaveRoom();
+    });
+  }, [callUUID]);
+
+  const handleLeaveMeeting = () => {
+    leaveRoom();
+    // Sent before ending the CallKeep call, whose endCall event would report it again.
+    reportCallEnded({ meetingId, counterpartId: calleeID }, profile?.token)
+      .catch((error) => console.warn('reportCallEnded failed', error));
+    endCallKeep(callUUID);
   };
 
   const toggleMute = async () => {
@@ -169,7 +202,7 @@ export default function LiveKitScreen({ route, navigation }) {
   const { state } = useGlobal();
   const { lang } = useLang();
   const { profile } = state;
-  const { token, wsURL, calleeID, callUUID } = route.params;
+  const { token, wsURL, calleeID, callUUID, meetingId } = route.params;
   const [connected, setConnected] = useState(false);
 
   // Start the audio session first.
@@ -223,7 +256,13 @@ export default function LiveKitScreen({ route, navigation }) {
       audio={true}
       video={true}
     >
-      <RoomView navigation={navigation} profile={profile} calleeID={calleeID} callUUID={callUUID} />
+      <RoomView
+        navigation={navigation}
+        profile={profile}
+        calleeID={calleeID}
+        callUUID={callUUID}
+        meetingId={meetingId}
+      />
     </LiveKitRoom>
   );
 };

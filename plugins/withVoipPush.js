@@ -14,6 +14,13 @@ const BRIDGING_IMPORTS = [
   '#import "RNCallKeep.h"',
 ];
 
+// Inserted before an already indented `return super.application(...)`.
+const CALLKEEP_INIT = `// Create CallKeep's module now so its CXProvider has a delegate before React Native loads.
+    // Otherwise a call answered from the lock screen after a VoIP launch is never fulfilled and
+    // CallKit fails it. Its events are buffered until JS listens.
+    _ = RNCallKeep()
+    RNVoipPushNotificationManager.voipRegistration()`;
+
 const DELEGATE_EXTENSION = `
 extension AppDelegate: PKPushRegistryDelegate {
   public func pushRegistry(_ registry: PKPushRegistry, didUpdate pushCredentials: PKPushCredentials, for type: PKPushType) {
@@ -61,6 +68,7 @@ extension AppDelegate: PKPushRegistryDelegate {
       payload: data,
       withCompletionHandler: completion
     )
+    startReactNativeInBackground()
   }
 }
 `;
@@ -94,7 +102,7 @@ const withVoipAppDelegate = (config) =>
     if (!contents.includes('RNVoipPushNotificationManager.voipRegistration()')) {
       contents = contents.replace(
         'return super.application(application, didFinishLaunchingWithOptions: launchOptions)',
-        '    RNVoipPushNotificationManager.voipRegistration()\n    return super.application(application, didFinishLaunchingWithOptions: launchOptions)',
+        `${CALLKEEP_INIT}\n    return super.application(application, didFinishLaunchingWithOptions: launchOptions)`,
       );
     }
     if (!contents.includes('PKPushRegistryDelegate')) {

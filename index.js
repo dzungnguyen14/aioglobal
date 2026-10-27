@@ -8,6 +8,7 @@ import {
     displayIncomingVideoCall,
     getCachedCall,
     isValidCallUUID,
+    notifyCallEnded,
     notifyIncomingAnswer,
     persistVoipToken,
     releaseCallLockScreen,
@@ -76,6 +77,13 @@ const answerIncomingCall = ({ callUUID }) => {
     notifyIncomingAnswer(call);
 };
 
+// Declined or hung up from the system call UI, or ended by RNCallKeep.endCall.
+const handleCallKeepEnd = (callUUID) => {
+    notifyCallEnded(getCachedCall(callUUID) || { uuid: callUUID });
+    clearCachedCall(callUUID);
+    releaseCallLockScreen();
+};
+
 const handleCallKeepEvents = (events) => {
     if (!Array.isArray(events)) return;
     events.forEach((event) => {
@@ -95,8 +103,7 @@ const handleCallKeepEvents = (events) => {
             setAudioSessionActive(true);
         }
         if (event?.name === 'RNCallKeepPerformEndCallAction' && event.data?.callUUID) {
-            clearCachedCall(event.data.callUUID);
-            releaseCallLockScreen();
+            handleCallKeepEnd(event.data.callUUID);
         }
     });
 };
@@ -117,10 +124,7 @@ const registerCallkeep = async () => {
 if (RNCallKeep) {
     try {
         RNCallKeep.addEventListener('answerCall', answerIncomingCall);
-        RNCallKeep.addEventListener('endCall', ({ callUUID }) => {
-            clearCachedCall(callUUID);
-            releaseCallLockScreen();
-        });
+        RNCallKeep.addEventListener('endCall', ({ callUUID }) => handleCallKeepEnd(callUUID));
         RNCallKeep.addEventListener('didDisplayIncomingCall', (data) => {
             cacheIncomingCall({
                 ...data.payload,

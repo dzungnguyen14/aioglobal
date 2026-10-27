@@ -30,6 +30,10 @@ FirebaseApp.configure()
     // factory.startReactNative(...) is called from SceneDelegate (UIScene lifecycle is required on iOS 27+).
 #endif
 
+    // Create CallKeep's module now so its CXProvider has a delegate before React Native loads.
+    // Otherwise a call answered from the lock screen after a VoIP launch is never fulfilled and
+    // CallKit fails it. Its events are buffered until JS listens.
+    _ = RNCallKeep()
     RNVoipPushNotificationManager.voipRegistration()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
@@ -71,6 +75,23 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     guard let windowScene = scene as? UIWindowScene,
           let appDelegate = appDelegate,
           let factory = appDelegate.reactNativeFactory else {
+      return
+    }
+
+    if let window = appDelegate.window {
+      // React Native already runs in the offscreen window it was started in by a VoIP push
+      // (see startReactNativeInBackground): move that window into the scene instead of
+      // starting a second instance, and pass the launch URL / activity on as events.
+      window.windowScene = windowScene
+      window.frame = windowScene.coordinateSpace.bounds
+      self.window = window
+      window.makeKeyAndVisible()
+      if !connectionOptions.urlContexts.isEmpty {
+        self.scene(scene, openURLContexts: connectionOptions.urlContexts)
+      }
+      if let userActivity = connectionOptions.userActivities.first {
+        self.scene(scene, continue: userActivity)
+      }
       return
     }
 
@@ -141,6 +162,18 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
   }
 }
 
+extension AppDelegate {
+  // A VoIP push on a locked phone launches the app in the background, where UIKit connects no
+  // scene, so React Native never starts and the answered call is never joined. Start it in an
+  // offscreen window; SceneDelegate moves that window into the scene once the app is opened.
+  func startReactNativeInBackground() {
+    guard window == nil, let factory = reactNativeFactory else { return }
+    let window = UIWindow(frame: UIScreen.main.bounds)
+    self.window = window
+    factory.startReactNative(withModuleName: "main", in: window, launchOptions: nil)
+  }
+}
+
 class ReactNativeDelegate: ExpoReactNativeFactoryDelegate {
   // Extension point for config-plugins
 
@@ -204,5 +237,6 @@ extension AppDelegate: PKPushRegistryDelegate {
       payload: data,
       withCompletionHandler: completion
     )
+    startReactNativeInBackground()
   }
 }
