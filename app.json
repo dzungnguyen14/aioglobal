@@ -3,7 +3,7 @@
     "name": "AIOGlobal",
     "slug": "Aioglobal",
     "scheme": "exp+aioglobal",
-    "version": "1.9.6",
+    "version": "1.9.7",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -19,7 +19,7 @@
     "ios": {
       "bundleIdentifier": "com.ktsgroup.aioglobal",
       "supportsTablet": false,
-      "buildNumber": "111",
+      "buildNumber": "112",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "Ứng dụng cần quyền dùng camera cho video call",
@@ -40,7 +40,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.ktsgroup.aioglobal",
-      "versionCode": 110,
+      "versionCode": 112,
       "permissions": [
         "android.permission.READ_PHONE_NUMBERS",
         "android.permission.RECORD_AUDIO",

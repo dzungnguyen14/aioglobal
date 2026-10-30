@@ -3,7 +3,7 @@ import { useLang, useProfile } from "../shared/hooks";
 import styles from "../styles/global";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useEffect, useCallback, memo, useRef, useMemo } from "react";
-import { joinChat, sendMessage, initRoom, postTyping, toggleFavorite } from "../components/home/zoom/api";
+import { joinChatOverSocket, sendMessageOverSocket, initRoom, postTypingOverSocket, toggleFavorite } from "../components/home/zoom/api";
 import ChatInput from "../components/chat/chat-input";
 import ChatSkeleton from "../components/chat/chat-skeleton";
 import { Alert } from "react-native";
@@ -94,7 +94,7 @@ const MessageItem = memo(({ message, sender, receiver, lang, isNextMessageOwner,
 
 const ChatboxScreen = memo(({ navigation, route }) => {
     const { state, dispatch } = useGlobal();
-    const { onlineUsers, historyMessages, currentRoom, isTyping, favoriteList, newMessage } = state;
+    const { onlineUsers, historyMessages, currentRoom, isTyping, favoriteList, newMessage, io } = state;
     const { lang } = useLang();
     const { profile } = state;
     const { room_id, _sender, _receiver, counterpart } = route.params;
@@ -105,7 +105,6 @@ const ChatboxScreen = memo(({ navigation, route }) => {
     const [receiver, setReceiver] = useState(_receiver ?? null);
     const [isLoading, setIsLoading] = useState(false);
     const [isFavorite, setIsFavorite] = useState(false);
-    const [isSending, setIsSending] = useState(false);
     const flatListRef = useRef(null);
     const previousMessageCount = useRef(messages.length);
     const isInitialMount = useRef(true);
@@ -119,7 +118,7 @@ const ChatboxScreen = memo(({ navigation, route }) => {
         if (!room_id || !counterpart || !profile.token) return;
 
         try {
-            const response = await joinChat({ id: room_id, counterpart }, profile.token);
+            const response = await joinChatOverSocket(io, { id: room_id, counterpart }, profile.token);
             const { room: data, owner_id } = response;
 
             if (!data?.people) return;
@@ -160,7 +159,7 @@ const ChatboxScreen = memo(({ navigation, route }) => {
                 Alert.alert(lang.error, error.message);
             }
         }
-    }, [room_id, counterpart, profile.token, dispatch, lang]);
+    }, [room_id, counterpart, profile.token, io, dispatch, lang]);
 
     const onMakeCall = useCallback(async () => {
         if (!sender || !receiver || isLoading) return;
@@ -199,48 +198,51 @@ const ChatboxScreen = memo(({ navigation, route }) => {
         if (!currentRoom || !profile.token) return;
 
         try {
-            await postTyping({
+            await postTypingOverSocket(io, {
                 room: currentRoom,
                 isTyping: true,
             }, profile.token);
         } catch (error) {
             console.error('Error posting typing status:', error);
         }
-    }, [currentRoom, profile.token]);
+    }, [currentRoom, profile.token, io]);
 
+    // Messages are not queued behind each other: each shows at once and is swapped for the saved copy
+    // when the server answers, without reloading the room.
     const onSend = useCallback(async (message) => {
-        if (!message.trim() || !sender || isSending) return;
-
-        setIsSending(true);
+        if (!message.trim() || !sender) return;
 
         // Optimistic UI update - add message immediately with temporary ID
-        const tempId = `temp_${Date.now()}`;
+        const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         const optimisticMessage = {
             _id: tempId,
+            clientID: tempId,
             author: sender,
             content: message,
             date: new Date(),
+            room: room_id,
             sending: true
         };
 
         setMessages(prev => [optimisticMessage, ...prev]);
         try {
-            await sendMessage({
+            const response = await sendMessageOverSocket(io, {
                 room_id,
                 author_id: sender._id,
                 content: message,
                 content_type: 'text',
+                client_id: tempId,
             }, profile.token);
 
-            onLoadMessages(false);
+            if (!response?.message?._id) throw new Error(response?.msg || response?.error || 'Send message failed');
 
+            // Keeps clientID so the list key, and so the bubble, stays the same.
+            setMessages(prev => prev.map(msg => msg._id === tempId ? { ...response.message, clientID: tempId } : msg));
         } catch (error) {
             setMessages(prev => prev.filter(msg => msg._id !== tempId));
             Alert.alert(lang.error, error.message);
-        } finally {
-            setIsSending(false);
         }
-    }, [sender, room_id, profile.token, onLoadMessages, lang, isSending]);
+    }, [sender, room_id, profile.token, io, lang]);
 
     const onToggleFavorite = useCallback(async () => {
         try {
@@ -269,8 +271,8 @@ const ChatboxScreen = memo(({ navigation, route }) => {
 
     useEffect(() => {
         if (newMessage && newMessage.room === room_id) {
-            setMessages(prev => [newMessage, ...prev]);
-            dispatch({ type: 'newMessage', payload: false });
+            setMessages(prev => prev.some(msg => msg._id === newMessage._id) ? prev : [newMessage, ...prev]);
+            dispatch({ type: 'SET_NEW_MESSAGE', payload: false });
         }
     }, [newMessage]);
     // Track new messages for smooth scroll
@@ -302,7 +304,7 @@ const ChatboxScreen = memo(({ navigation, route }) => {
         );
     }, [messages, sender, receiver, lang]);
 
-    const keyExtractor = useCallback((item, index) => item._id?.toString() || index.toString(), []);
+    const keyExtractor = useCallback((item, index) => item.clientID || item._id?.toString() || index.toString(), []);
 
     const getItemLayout = useCallback((data, index) => ({
         length: 80, // Approximate height
@@ -414,7 +416,6 @@ const ChatboxScreen = memo(({ navigation, route }) => {
                         <ChatInput
                             onSend={onSend}
                             lang={lang}
-                            loading={isSending}
                             onTyping={onTyping}
                         />
                     </View>

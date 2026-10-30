@@ -89,6 +89,45 @@ export const toggleFavorite = (data, token) =>
 export const onFindChatSocial = (param, token) => {
     return makeRequest('post', `${API_HOST}/zoom/find_chat_social`, param, token);
 };
+
+// Asks the call server over the app's socket. Resolves null when the socket is not connected,
+// does not answer in time (e.g. a server without the event) or answers with an error.
+const requestOverSocket = (io, event, data = {}, timeout = 10000) => new Promise((resolve) => {
+    if (!io?.connected) return resolve(null);
+    const timer = setTimeout(() => resolve(null), timeout);
+    io.emit(event, data, (response) => {
+        clearTimeout(timer);
+        resolve(response?.ok ? response : null);
+    });
+});
+
+// Contacts, chat history and favorites come over the socket; the HTTP API is only a fallback
+// for when the socket is not up yet. Both answer with the same shape.
+export const fetchContactsOverSocket = async (io, token) =>
+    (await requestOverSocket(io, 'list-rooms', { limit: 30 })) ?? fetchContacts(token);
+
+export const joinChatOverSocket = async (io, data, token) =>
+    (await requestOverSocket(io, 'join-room', { id: data.id })) ?? joinChat(data, token);
+
+export const fetchFavoritesOverSocket = async (io, token) =>
+    (await requestOverSocket(io, 'list-favorites')) ?? fetchFavorites(token);
+
+// Answers { message } once saved. Unlike the reads above it never retries over HTTP after emitting:
+// the server may have saved the message already and a retry would send it twice.
+export const sendMessageOverSocket = async (io, data, token) => {
+    if (!io?.connected) return sendMessage(data, token);
+    const response = await requestOverSocket(io, 'send-message', {
+        roomID: data.room_id,
+        content: data.content,
+        clientID: data.client_id,
+    });
+    return response ?? { success: false };
+};
+
+export const postTypingOverSocket = (io, data, token) => {
+    if (!io?.connected) return postTyping(data, token);
+    io.emit('typing', { roomID: data.room?._id, isTyping: data.isTyping });
+};
 // New API Server
 
 

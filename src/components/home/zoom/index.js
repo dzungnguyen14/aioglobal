@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, memo, useRef, useMemo } from '
 import { View, KeyboardAvoidingView, Text, FlatList } from 'react-native';
 import { useLang } from '../../../shared/hooks';
 import { useGlobal } from '../../../state/global';
-import { addContact, fetchContacts, fetchFavorites, searchContacts } from './api';
+import { addContact, fetchContactsOverSocket, fetchFavoritesOverSocket, searchContacts } from './api';
 import SearchBar from './SearchBar';
 import ContactBar from './ContactBar';
 import { ChatItem, ContactItem, RecentContactItem, SearchResultItem } from './Items';
@@ -19,7 +19,7 @@ const PAGES_TYPE = {
 const HomeZoom = memo(({ token, navigation, profile }) => {
   const { lang } = useLang();
   const { state, dispatch } = useGlobal();
-  const { recentRooms, myZoomID, favoriteList } = state || {};
+  const { recentRooms, myZoomID, favoriteList, io } = state || {};
   
   const [search, setSearch] = useState('');
   const [data, setData] = useState(recentRooms ?? []);
@@ -50,7 +50,7 @@ const HomeZoom = memo(({ token, navigation, profile }) => {
     
     try {
       setIsLoading(true);
-      const res = await fetchContacts(token);
+      const res = await fetchContactsOverSocket(io, token);
       
       if (!isMountedRef.current) return;
       
@@ -73,14 +73,14 @@ const HomeZoom = memo(({ token, navigation, profile }) => {
         setIsLoading(false);
       }
     }
-  }, [token, dispatch, state.recentRooms, state.myZoomID]);
+  }, [token, io, dispatch, state.recentRooms, state.myZoomID]);
 
   const fetchFavoriteContacts = useCallback(async () => {
     if (!token || !isMountedRef.current) return;
     
     try {
       setIsFetchingFavorites(true);
-      const data = await fetchFavorites(token);
+      const data = await fetchFavoritesOverSocket(io, token);
       
       if (!isMountedRef.current) return;
       
@@ -95,16 +95,17 @@ const HomeZoom = memo(({ token, navigation, profile }) => {
         setIsFetchingFavorites(false);
       }
     }
-  }, [token, dispatch]);
+  }, [token, io, dispatch]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', fetchData);
     return unsubscribe;
   }, [navigation, fetchData]);
 
+  // Again once the socket is authenticated, so the list comes over it.
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [io]);
 
   useEffect(() => {
     if (isSearch) {

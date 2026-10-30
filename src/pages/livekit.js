@@ -135,7 +135,7 @@ const RoomView = ({ navigation, profile, calleeID, callUUID, meetingId }) => {
         <View style={styles.remoteParticipantView}>
           <VideoTrack trackRef={item} style={styles.videoTrack} />
           <View style={styles.participantInfo}>
-            <Text style={styles.participantName}>{item.participant.identity}</Text>
+            <Text style={styles.participantName}>{item.participant.name || item.participant.identity}</Text>
           </View>
         </View>
       )
