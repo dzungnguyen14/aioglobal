@@ -1,5 +1,5 @@
 import React , { useEffect, useRef, useState, useCallback, memo } from 'react';
-import { View, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity, Text, Linking, Alert, AppState } from 'react-native';
+import { View, FlatList, ActivityIndicator, RefreshControl, TouchableOpacity, Text, Linking, Alert, AppState } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import styles from './style';
 import Post from './post';
@@ -18,6 +18,11 @@ import { Modal } from 'react-native-paper';
 
 const PAGE_LIMIT = 11;
 const MAX_PAGE = 20;
+const postKey = (post) => {
+    const id = post?.blog_id ?? post?.custom_url;
+    return id != null ? String(id) : null;
+};
+const VIEWABILITY_CONFIG = { itemVisiblePercentThreshold: 60 };
 
 export const TABS = {
     NEWFEED: 'newfeed',
@@ -42,7 +47,6 @@ const SocialDashboard = ({ profile, navigation, toggleOS }) => {
         video: [],
         content: '',
     });
-    const containerRefs = useRef([]);
     const [currentInView, setCurrentInView] = useState(0);
 
     const [data, setData] = useState([]);
@@ -82,7 +86,15 @@ const SocialDashboard = ({ profile, navigation, toggleOS }) => {
         if (posts) {
             pageRef.current = page;
             hasMoreRef.current = posts.length > 0 && page < MAX_PAGE;
-            setData(prev => (page > 1 ? prev.concat(posts) : posts));
+            setData(prev => {
+                if (page === 1) return posts;
+                // New posts shift the pages: skip ones already listed (duplicate keys in the FlatList).
+                const seen = new Set(prev.map(postKey));
+                return prev.concat(posts.filter((post) => {
+                    const key = postKey(post);
+                    return key == null || !seen.has(key);
+                }));
+            });
         } else if (page === 1) {
             setLoadError(true);
         }
@@ -95,24 +107,12 @@ const SocialDashboard = ({ profile, navigation, toggleOS }) => {
         loadPage(pageRef.current + 1);
     }
 
-    const handleScroll = ({ nativeEvent }) => {
-        const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-        containerRefs.current.forEach((viewRef, i) => {
-            if (viewRef && viewRef.measure) {
-                viewRef.measure((x, y, width, height, left, top) => {
-                    const isViewVisible = top < layoutMeasurement.height && top + height > layoutMeasurement.height;
-                    if (isViewVisible) {
-                        setCurrentInView(i);
-                    }
-                });
-            }
-        });
-        // scroll to bottom
-        const isBottom = layoutMeasurement.height + contentOffset.y >= (contentSize.height - 1000);
-        if (isBottom) {
-            loadMore();
-        }
-    };
+    // The post the user is looking at (its video may play, the others are paused). FlatList reports
+    // it, instead of measuring every post on each scroll event.
+    const onViewableItemsChanged = useRef(({ viewableItems }) => {
+        const first = viewableItems.find((v) => v.isViewable && v.index != null);
+        if (first) setCurrentInView(first.index);
+    }).current;
     const onSaveDraft = (item) => {
         setShowForm(false);
         setDraft(item);
@@ -237,6 +237,24 @@ const SocialDashboard = ({ profile, navigation, toggleOS }) => {
         return true;
     }
 
+    // Stable callbacks for the memoized Post: they call the latest handlers through a ref, so
+    // a re-render of this screen does not re-render every post.
+    const handlersRef = useRef();
+    handlersRef.current = { openActionSheet, onOpenProfile };
+    const onPostActionSheet = useCallback((item) => handlersRef.current.openActionSheet(item), []);
+    const onPostOpenProfile = useCallback((item) => handlersRef.current.onOpenProfile(item), []);
+
+    const renderPost = useCallback(({ item, index }) => (
+        <Post
+            SOCIAL_CONFIG={SOCIAL_CONFIG}
+            item={item}
+            isInView={index === currentInView && autoPlayVideo}
+            openActionSheet={onPostActionSheet}
+            profile={profile}
+            onOpenProfile={onPostOpenProfile}
+        />
+    ), [SOCIAL_CONFIG, currentInView, autoPlayVideo, profile, onPostActionSheet, onPostOpenProfile]);
+
     const onUpdateAvatar = async (file) => saveUploadedImage(await uploadAvatar(file, profile.token), 'avatar');
     const onUpdateCover = async (file) => saveUploadedImage(await uploadCover(file, profile.token), 'coverPhoto');
 
@@ -249,37 +267,45 @@ const SocialDashboard = ({ profile, navigation, toggleOS }) => {
                 onShowAccount={onShowOwnerProfile}
                 onShowNavigation={() => setShowNavigation(true)}
             />
-            <ScrollView style={[styles.container, { marginBottom: 80 }]} onScroll={handleScroll} scrollEventThrottle={400} refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={loadFirst} />
-            }>
-                <Toolbar
-                    navigation={navigation}
-                    profile={profile}
-                    onPress={() => setShowForm(true)}
-                    onShowProfile={onShowOwnerProfile}
-                    tab={tab}
-                    toggleOS={toggleOS}
-                    setTab={setTab}
-                />
-                {data.map((item, index) => {
-                    return (
-                        <View ref={(ref) => (containerRefs.current[index] = ref)} key={index}>
-                            <Post SOCIAL_CONFIG={SOCIAL_CONFIG} item={item} isInView={index === currentInView && autoPlayVideo} openActionSheet={openActionSheet} profile={profile} onOpenProfile={onOpenProfile} />
+            <FlatList
+                style={[styles.container, { marginBottom: 80 }]}
+                data={data}
+                keyExtractor={(item, index) => postKey(item) ?? `idx-${index}`}
+                renderItem={renderPost}
+                extraData={currentInView}
+                ListHeaderComponent={
+                    <Toolbar
+                        navigation={navigation}
+                        profile={profile}
+                        onPress={() => setShowForm(true)}
+                        onShowProfile={onShowOwnerProfile}
+                        tab={tab}
+                        toggleOS={toggleOS}
+                        setTab={setTab}
+                    />
+                }
+                ListEmptyComponent={
+                    initialLoading ? (
+                        <ActivityIndicator size="large" color="#3f85ca" style={{ marginVertical: 40 }} />
+                    ) : loadError ? (
+                        <View style={{ alignItems: 'center', marginVertical: 40 }}>
+                            <Text style={{ color: 'gray', marginBottom: 12 }}>Không tải được bài viết</Text>
+                            <TouchableOpacity onPress={() => { setInitialLoading(true); loadPage(1); }}>
+                                <Text style={{ color: '#007AFF', fontWeight: 'bold' }}>Thử lại</Text>
+                            </TouchableOpacity>
                         </View>
-                    )
-                })}
-                {data.length === 0 && initialLoading && (
-                    <ActivityIndicator size="large" color="#3f85ca" style={{ marginVertical: 40 }} />
-                )}
-                {data.length === 0 && !initialLoading && loadError && (
-                    <View style={{ alignItems: 'center', marginVertical: 40 }}>
-                        <Text style={{ color: 'gray', marginBottom: 12 }}>Không tải được bài viết</Text>
-                        <TouchableOpacity onPress={() => { setInitialLoading(true); loadPage(1); }}>
-                            <Text style={{ color: '#007AFF', fontWeight: 'bold' }}>Thử lại</Text>
-                        </TouchableOpacity>
-                    </View>
-                )}
-            </ScrollView>
+                    ) : null
+                }
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadFirst} />}
+                onEndReached={loadMore}
+                onEndReachedThreshold={1.5}
+                onViewableItemsChanged={onViewableItemsChanged}
+                viewabilityConfig={VIEWABILITY_CONFIG}
+                // Only a few posts mounted at a time: images and video players off screen are released.
+                initialNumToRender={3}
+                maxToRenderPerBatch={3}
+                windowSize={5}
+            />
             {showForm && (<PostCreate onClose={(item) => onSaveDraft(item)} item={draft} onSuccess={loadFirst} />)}
             {showNavigation && (
                 <Modal

@@ -1,4 +1,4 @@
-import { API_HOST } from "../shared/constant";
+import { API_HOST, API_SOCIAL_HOST } from "../shared/constant";
 import axios from "axios";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 
@@ -225,7 +225,33 @@ export const featureToggle = () =>
 // and the feed stays empty with no way to retry.
 const SOCIAL_TIMEOUT = 15000;
 
-export const getSocialsPosts = (param, token) => {
+// The feed is read straight from the social server (one hop instead of app -> card-mg -> social).
+// If that server rejects the token (401: APP_JWT_SECRET not set there yet) or does not have the
+// endpoint (404: not deployed yet), the card-mg proxy is used for the rest of the session.
+let socialDirectDisabled = false;
+
+const getSocialsPostsDirect = async (param, token) => {
+    try {
+        const response = await axios.post(`${API_SOCIAL_HOST}/blogs/feed_app`, param, {
+            headers: createAuthHeader(token),
+            timeout: SOCIAL_TIMEOUT,
+        });
+        return Array.isArray(response.data?.data) ? response.data : null;
+    } catch (error) {
+        const status = error.response?.status;
+        if (status === 401 || status === 404) {
+            socialDirectDisabled = true;
+        }
+        console.error('Social feed direct error:', status || error.message);
+        return null;
+    }
+};
+
+export const getSocialsPosts = async (param, token) => {
+    if (!socialDirectDisabled) {
+        const direct = await getSocialsPostsDirect(param, token);
+        if (direct) return direct;
+    }
     return makeRequest('post', `${API_HOST}/social/get_posts`, param, token, SOCIAL_TIMEOUT);
 };
 

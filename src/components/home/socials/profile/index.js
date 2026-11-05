@@ -47,7 +47,7 @@ const ProfilePage = ({ onClose, profile, SOCIAL_CONFIG, userProfile, navigation,
         isFetchingRef.current = true;
         setIsLoading(true);
         try {
-            const { data } = await getSocialsPosts({
+            const { data, has_more } = await getSocialsPosts({
                 page: pageNumber,
                 limit: PAGE_LIMIT,
                 owner_id: userProfile.user_id
@@ -59,7 +59,9 @@ const ProfilePage = ({ onClose, profile, SOCIAL_CONFIG, userProfile, navigation,
                     setPosts(prev => [...prev, ...data]);
                 }
                 setPage(pageNumber);
-                setHasMore(data.length === PAGE_LIMIT);
+                // The server returns at most PAGE_LIMIT - 1 posts per page (one extra row tells it
+                // whether there is a next page); has_more comes from the direct social endpoint.
+                setHasMore(has_more ?? data.length >= PAGE_LIMIT - 1);
             } else {
                 setHasMore(false);
             }

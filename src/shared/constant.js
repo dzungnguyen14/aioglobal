@@ -4,7 +4,7 @@ import { Platform } from "react-native";
 // is reset or hangs (and RN's OkHttp has no default timeout), so screens stayed empty. Same host as iOS.
 const HTTP = 'https://';
 const API_HOST = HTTP + 'app.aioglobal.org/api/mobile';
-const API_SOCIAL_HOST = 'http://mxh.aioglobal.org/api';
+const API_SOCIAL_HOST = 'https://aioglobal.com.vn/api';
 const USER_TOKEN_KEY = 'USER_TOKEN_KEY';
 const WALLET_STORAGE_TOKEN_KEY = 'WALLET_STORAGE_TOKEN_KEY';
 const USER_LANG = 'USER_LANG';
