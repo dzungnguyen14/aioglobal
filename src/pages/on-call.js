@@ -13,7 +13,7 @@ import LottieView from 'lottie-react-native';
 import RingingLottie from '../../assets/ringing.json';  
 import RingingMP3 from '../../assets/ringing.mp3';
 import { Audio } from 'expo-av';
-import { requestMediaPermissions, checkMediaPermissions } from '../shared/permissions';
+import { requestMediaPermissions, checkMediaPermissions, requestMicrophonePermission, PERMISSION_STATUS } from '../shared/permissions';
 import { TabRoute } from "./home";
 
 const SECONDS_RINGING = 10;
@@ -34,7 +34,8 @@ function OnCallScreen({ navigation, route }) {
     const { profile } = state;
     const { lang } = useLang();
     const { IS_END_CALL } = state;
-    const { room_id, meeting_id, incoming, counterpart } = route.params;
+    // video: false for an audio-only call
+    const { room_id, meeting_id, incoming, counterpart, video = true } = route.params;
     const [callStatus, setCallStatus] = useState(CALL_STATUS.CONNECTING); // connecting, ongoing, ended
     const [callDuration, setCallDuration] = useState(0);
     console.log('counterpart', route.params);
@@ -83,21 +84,26 @@ function OnCallScreen({ navigation, route }) {
     const checkPermissions = async () => {
         try {
             // First check if permissions are already granted (from cache)
+            // An audio call only needs the microphone.
             const currentPermissions = await checkMediaPermissions();
-            
-            if (currentPermissions.allGranted) {
+
+            if (video ? currentPermissions.allGranted : currentPermissions.microphone === PERMISSION_STATUS.GRANTED) {
                 setPermissionsGranted(true);
                 setPermissionsChecked(true);
             } else {
                 // Request permissions if not granted
-                const result = await requestMediaPermissions(lang);
-                setPermissionsGranted(result.allGranted);
+                const allGranted = video
+                    ? (await requestMediaPermissions(lang)).allGranted
+                    : (await requestMicrophonePermission(lang)) === PERMISSION_STATUS.GRANTED;
+                setPermissionsGranted(allGranted);
                 setPermissionsChecked(true);
-                
-                if (!result.allGranted) {
+
+                if (!allGranted) {
                     Alert.alert(
                         lang.permission_required || 'Permission Required',
-                        lang.camera_permission_denied || 'Camera and microphone permissions are required for video calls.',
+                        video
+                            ? lang.camera_permission_denied || 'Camera and microphone permissions are required for video calls.'
+                            : lang.microphone_permission_denied || 'Microphone permission is required for voice calls.',
                         [
                             {
                                 text: lang.cancel || 'Cancel',
@@ -200,6 +206,7 @@ function OnCallScreen({ navigation, route }) {
                     wsURL: livekit.wsURL,
                     calleeID: callee._id,
                     meetingId: meeting_id,
+                    video,
                 });
             } else if (url) {
                 setIframeURL(url);

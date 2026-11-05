@@ -1,5 +1,6 @@
-import React , { useEffect, useRef, useState, memo } from 'react';
-import { View, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity, Text, Linking, Alert } from 'react-native';
+import React , { useEffect, useRef, useState, useCallback, memo } from 'react';
+import { View, ScrollView, ActivityIndicator, RefreshControl, TouchableOpacity, Text, Linking, Alert, AppState } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import styles from './style';
 import Post from './post';
 import { fetchSocial, getConfigSocial, getSocialsPosts, uploadAvatar, uploadCover } from '../../../fetcher/api';
@@ -14,6 +15,9 @@ import { USER_TOKEN_KEY } from '../../../shared/constant';
 import { Ionicons } from '@expo/vector-icons';
 import { useGlobal } from '../../../state/global';
 import { Modal } from 'react-native-paper';
+
+const PAGE_LIMIT = 11;
+const MAX_PAGE = 20;
 
 export const TABS = {
     NEWFEED: 'newfeed',
@@ -41,29 +45,56 @@ const SocialDashboard = ({ profile, navigation, toggleOS }) => {
     const containerRefs = useRef([]);
     const [currentInView, setCurrentInView] = useState(0);
 
-    const [filter, setFilter] = useState({
-        page: 1,
-        limit: 11,
-    })
-    const [loadingMore, setLoadingMore] = useState(false);
     const [data, setData] = useState([]);
-    const loadPosts = async () => {
-        const response = await getSocialsPosts(filter, profile.token);
-        if (response.data && response.data.length > 0) {
-            if (filter.page > 1) {
-                setData(data.concat(response.data));
-            } else {
-                setData(response.data);
-            }
+    const [initialLoading, setInitialLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [loadError, setLoadError] = useState(false);
+
+    // Refs, not state: read from scroll/focus/AppState callbacks, which would otherwise see stale values.
+    const tokenRef = useRef(profile?.token);
+    tokenRef.current = profile?.token;
+    const pageRef = useRef(1);
+    const hasMoreRef = useRef(true);
+    const loadingRef = useRef(false);
+    const requestIdRef = useRef(0);
+    const dataCountRef = useRef(0);
+    dataCountRef.current = data.length;
+    const configLoadedRef = useRef(false);
+
+    const loadPage = useCallback(async (page) => {
+        const token = tokenRef.current;
+        if (!token) return;
+        const requestId = ++requestIdRef.current;
+        loadingRef.current = true;
+        setLoadError(false);
+
+        const params = { page, limit: PAGE_LIMIT };
+        let response = await getSocialsPosts(params, token);
+        // One retry: the first request on a cold or just-resumed connection often fails on Android.
+        if (!Array.isArray(response?.data) && requestId === requestIdRef.current) {
+            response = await getSocialsPosts(params, token);
         }
-        setLoadingMore(false);
+        // A newer request (pull-to-refresh, refocus) replaced this one: drop the result.
+        if (requestId !== requestIdRef.current) return;
+
+        loadingRef.current = false;
+        const posts = Array.isArray(response?.data) ? response.data : null;
+        if (posts) {
+            pageRef.current = page;
+            hasMoreRef.current = posts.length > 0 && page < MAX_PAGE;
+            setData(prev => (page > 1 ? prev.concat(posts) : posts));
+        } else if (page === 1) {
+            setLoadError(true);
+        }
+        setInitialLoading(false);
+        setRefreshing(false);
+    }, []);
+
+    const loadMore = () => {
+        if (loadingRef.current || !hasMoreRef.current || dataCountRef.current === 0) return;
+        loadPage(pageRef.current + 1);
     }
 
-    const loadMore = async () => {
-        setLoadingMore(true);
-        setFilter(prev => ({ ...prev, page: prev.page + 1 }))
-    }
-    
     const handleScroll = ({ nativeEvent }) => {
         const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
         containerRefs.current.forEach((viewRef, i) => {
@@ -78,7 +109,7 @@ const SocialDashboard = ({ profile, navigation, toggleOS }) => {
         });
         // scroll to bottom
         const isBottom = layoutMeasurement.height + contentOffset.y >= (contentSize.height - 1000);
-        if (isBottom && !loadingMore && filter.page < 20) {
+        if (isBottom) {
             loadMore();
         }
     };
@@ -87,8 +118,15 @@ const SocialDashboard = ({ profile, navigation, toggleOS }) => {
         setDraft(item);
     }
 
+    const configLoadingRef = useRef(false);
     const onGetConfig = async () => {
-        const response = await getConfigSocial(profile.token);
+        if (!tokenRef.current || configLoadingRef.current) return;
+        configLoadingRef.current = true;
+        const response = await getConfigSocial(tokenRef.current);
+        configLoadingRef.current = false;
+        // A failed request must not wipe the config (url '' breaks likes/delete); retried on next focus.
+        if (!response?.api_url && !response?.user) return;
+        configLoadedRef.current = true;
         if (response.status) {
             await setItem('SOCIAL_API_URL', response.api_url);
         }
@@ -98,12 +136,31 @@ const SocialDashboard = ({ profile, navigation, toggleOS }) => {
         if (response.icons) {
             setIcons(response.icons);
         }
-        SET_SOCIAL_CONFIG({ url: response.api_url ?? '', user: response.user ?? {} });
+        SET_SOCIAL_CONFIG(prev => ({ url: response.api_url || prev.url, user: response.user || prev.user }));
     }
 
+    // Config and first page in parallel, as soon as the token is known (not only on first mount).
     useEffect(() => {
+        if (!profile?.token) return;
         onGetConfig();
-    }, []);
+        if (dataCountRef.current === 0) loadPage(1);
+    }, [profile?.token]);
+
+    // Retry what failed when the tab is shown again or the app comes back to the foreground,
+    // instead of leaving an empty feed until the user switches around.
+    const reloadIfEmpty = useCallback(() => {
+        if (!configLoadedRef.current) onGetConfig();
+        if (dataCountRef.current === 0 && !loadingRef.current) loadPage(1);
+    }, [loadPage]);
+
+    useFocusEffect(reloadIfEmpty);
+
+    useEffect(() => {
+        const sub = AppState.addEventListener('change', (next) => {
+            if (next === 'active') reloadIfEmpty();
+        });
+        return () => sub.remove();
+    }, [reloadIfEmpty]);
 
     const { showActionSheetWithOptions } = useActionSheet();
     const openActionSheet = (item) => {
@@ -134,19 +191,14 @@ const SocialDashboard = ({ profile, navigation, toggleOS }) => {
         );
     };
 
-    useEffect(() => {
-        loadPosts();
-    }, [filter.page]);
-
-
-    const loadFirst = async () => {
+    // Pull-to-refresh, after posting and after deleting. Keeps the current list on screen until
+    // page 1 arrives (it used to clear it and fire two overlapping requests).
+    const loadFirst = () => {
         setShowForm(false);
         setDraft({});
-        setData([]);
-        setFilter(prev => ({ ...prev, page: 1 }))
-        setTimeout(() => {
-            loadPosts();
-        }, 1000);
+        setRefreshing(true);
+        hasMoreRef.current = true;
+        loadPage(1);
     }
 
     const onOpenProfile = ({ user_id, avatar, username, coverPhoto, email }) => {
@@ -198,7 +250,7 @@ const SocialDashboard = ({ profile, navigation, toggleOS }) => {
                 onShowNavigation={() => setShowNavigation(true)}
             />
             <ScrollView style={[styles.container, { marginBottom: 80 }]} onScroll={handleScroll} scrollEventThrottle={400} refreshControl={
-                <RefreshControl refreshing={loadingMore} onRefresh={loadFirst} />
+                <RefreshControl refreshing={refreshing} onRefresh={loadFirst} />
             }>
                 <Toolbar
                     navigation={navigation}
@@ -216,9 +268,17 @@ const SocialDashboard = ({ profile, navigation, toggleOS }) => {
                         </View>
                     )
                 })}
-                {/* {loadingMore && (
-                    <ActivityIndicator size="small" color="#007AFF" style={{ marginVertical: 20 }} />
-                )} */}
+                {data.length === 0 && initialLoading && (
+                    <ActivityIndicator size="large" color="#3f85ca" style={{ marginVertical: 40 }} />
+                )}
+                {data.length === 0 && !initialLoading && loadError && (
+                    <View style={{ alignItems: 'center', marginVertical: 40 }}>
+                        <Text style={{ color: 'gray', marginBottom: 12 }}>Không tải được bài viết</Text>
+                        <TouchableOpacity onPress={() => { setInitialLoading(true); loadPage(1); }}>
+                            <Text style={{ color: '#007AFF', fontWeight: 'bold' }}>Thử lại</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
             </ScrollView>
             {showForm && (<PostCreate onClose={(item) => onSaveDraft(item)} item={draft} onSuccess={loadFirst} />)}
             {showNavigation && (

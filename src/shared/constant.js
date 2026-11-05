@@ -1,6 +1,8 @@
 import { Platform } from "react-native";
 
-const HTTP = Platform.OS === 'android' ? 'http://' : 'https://';
+// Android used plain http, which goes through Cloudflare port 80: on some networks the connection
+// is reset or hangs (and RN's OkHttp has no default timeout), so screens stayed empty. Same host as iOS.
+const HTTP = 'https://';
 const API_HOST = HTTP + 'app.aioglobal.org/api/mobile';
 const API_SOCIAL_HOST = 'http://mxh.aioglobal.org/api';
 const USER_TOKEN_KEY = 'USER_TOKEN_KEY';

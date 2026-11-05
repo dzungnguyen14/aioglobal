@@ -64,10 +64,10 @@ const ChatInput = ({ onSend, lang, loading, onTyping }) => {
                     onPress={() => handleActionPress('emoji')}
                     activeOpacity={0.7}
                 >
-                    <Ionicons 
-                        name={emoPicker ? "happy" : "happy-outline"} 
-                        size={24} 
-                        color={emoPicker ? "#1976D2" : "#6B7280"} 
+                    <Ionicons
+                        name={emoPicker ? "happy" : "happy-outline"}
+                        size={22}
+                        color={emoPicker ? "#1976D2" : "#6B7280"}
                     />
                 </TouchableOpacity>
 
@@ -84,63 +84,66 @@ const ChatInput = ({ onSend, lang, loading, onTyping }) => {
                     textAlignVertical="center"
                 />
 
-                <Animated.View 
-                    style={[
-                        componentStyles.actionButtonsContainer,
-                        { 
-                            opacity: actionButtonsOpacity,
-                            transform: [{ scale: actionButtonsOpacity }]
-                        }
-                    ]}
-                    pointerEvents={text ? 'none' : 'auto'}
-                >
-                    <TouchableOpacity 
-                        style={componentStyles.iconButton}
-                        onPress={() => handleActionPress('image')}
-                        activeOpacity={0.7}
-                    >
-                        <Ionicons name="image-outline" size={24} color="#6B7280" />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity 
-                        style={componentStyles.iconButton}
-                        onPress={() => handleActionPress('mic')}
-                        activeOpacity={0.7}
-                    >
-                        <Ionicons name="mic-outline" size={24} color="#6B7280" />
-                    </TouchableOpacity>
-                </Animated.View>
-
-                <Animated.View 
-                    style={[
-                        componentStyles.sendButtonContainer,
-                        {
-                            opacity: sendButtonScale,
-                            transform: [
-                                { scale: sendButtonScale },
-                                { 
-                                    translateX: sendButtonScale.interpolate({
-                                        inputRange: [0, 1],
-                                        outputRange: [20, 0]
-                                    })
-                                }
-                            ]
-                        }
-                    ]}
-                    pointerEvents={text ? 'auto' : 'none'}
-                >
-                    <TouchableOpacity
+                {/* Takes its own room in the row, so the text never runs under the buttons */}
+                <View style={[componentStyles.trailingButtons, { width: text ? BUTTON_SIZE : BUTTON_SIZE * 2 }]}>
+                    <Animated.View
                         style={[
-                            componentStyles.sendButton,
-                            loading && componentStyles.sendButtonDisabled
+                            componentStyles.actionButtonsContainer,
+                            {
+                                opacity: actionButtonsOpacity,
+                                transform: [{ scale: actionButtonsOpacity }]
+                            }
                         ]}
-                        onPress={onHandleSend}
-                        disabled={loading}
-                        activeOpacity={0.8}
+                        pointerEvents={text ? 'none' : 'auto'}
                     >
-                        <Ionicons name="send" size={20} color="#fff" />
-                    </TouchableOpacity>
-                </Animated.View>
+                        <TouchableOpacity
+                            style={componentStyles.iconButton}
+                            onPress={() => handleActionPress('image')}
+                            activeOpacity={0.7}
+                        >
+                            <Ionicons name="image-outline" size={22} color="#6B7280" />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={componentStyles.iconButton}
+                            onPress={() => handleActionPress('mic')}
+                            activeOpacity={0.7}
+                        >
+                            <Ionicons name="mic-outline" size={22} color="#6B7280" />
+                        </TouchableOpacity>
+                    </Animated.View>
+
+                    <Animated.View
+                        style={[
+                            componentStyles.sendButtonContainer,
+                            {
+                                opacity: sendButtonScale,
+                                transform: [
+                                    { scale: sendButtonScale },
+                                    {
+                                        translateX: sendButtonScale.interpolate({
+                                            inputRange: [0, 1],
+                                            outputRange: [20, 0]
+                                        })
+                                    }
+                                ]
+                            }
+                        ]}
+                        pointerEvents={text ? 'auto' : 'none'}
+                    >
+                        <TouchableOpacity
+                            style={[
+                                componentStyles.sendButton,
+                                loading && componentStyles.sendButtonDisabled
+                            ]}
+                            onPress={onHandleSend}
+                            disabled={loading}
+                            activeOpacity={0.8}
+                        >
+                            <Ionicons name="send" size={16} color="#fff" />
+                        </TouchableOpacity>
+                    </Animated.View>
+                </View>
             </View>
             
             <EmoPicker 
@@ -157,84 +160,81 @@ const ChatInput = ({ onSend, lang, loading, onTyping }) => {
     );
 };
 
+// Height of one line of input, and of each icon button
+const BUTTON_SIZE = 36;
+
 const componentStyles = StyleSheet.create({
     container: {
         // backgroundColor: '#fff',
         // borderTopWidth: 1,
         // borderTopColor: '#E5E7EB',
-        paddingHorizontal: 16,
+        paddingHorizontal: 10,
         width: '100%',
     },
     inputWrapper: {
         flexDirection: 'row',
-        alignItems: 'center',
+        // buttons stay on the last line as the text grows
+        alignItems: 'flex-end',
         // backgroundColor: '#F3F4F6',
         backgroundColor: '#fff',
-        borderRadius: 24,
-        paddingHorizontal: 4,
-        paddingVertical: 4,
-        minHeight: 48,
-        maxHeight: 120,
-        borderWidth: 2,
-        borderColor: 'transparent',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 2,
+        borderRadius: 20,
+        paddingHorizontal: 2,
+        paddingVertical: 1,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
         width: '100%',
     },
     inputWrapperFocused: {
-        backgroundColor: '#fff',
         borderColor: '#1976D2',
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
     },
     textInput: {
         flex: 1,
-        fontSize: 16,
+        fontSize: 15,
         lineHeight: 20,
         color: '#1F2937',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
+        paddingHorizontal: 6,
+        paddingTop: 8,
+        paddingBottom: 8,
         maxHeight: 100,
-        minHeight: 40,
+        minHeight: BUTTON_SIZE,
     },
     iconButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: BUTTON_SIZE,
+        height: BUTTON_SIZE,
+        borderRadius: BUTTON_SIZE / 2,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: 'transparent',
+    },
+    trailingButtons: {
+        height: BUTTON_SIZE,
     },
     actionButtonsContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         position: 'absolute',
-        right: 4,
+        top: 0,
+        right: 0,
     },
     sendButtonContainer: {
         position: 'absolute',
-        right: 4,
+        top: 0,
+        right: 0,
+        width: BUTTON_SIZE,
+        height: BUTTON_SIZE,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     sendButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
         backgroundColor: '#1976D2',
         alignItems: 'center',
         justifyContent: 'center',
-        shadowColor: '#1976D2',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-        elevation: 4,
     },
     sendButtonDisabled: {
         backgroundColor: '#93C5FD',
-        shadowOpacity: 0.1,
     },
 });
 

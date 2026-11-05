@@ -3,7 +3,8 @@ import { useLang, useProfile } from "../shared/hooks";
 import styles from "../styles/global";
 import { Ionicons } from "@expo/vector-icons";
 import { useState, useEffect, useCallback, memo, useRef, useMemo } from "react";
-import { joinChatOverSocket, sendMessageOverSocket, initRoom, postTypingOverSocket, toggleFavorite } from "../components/home/zoom/api";
+import { useFocusEffect } from "@react-navigation/native";
+import { joinChatOverSocket, sendMessageOverSocket, initRoom, postTypingOverSocket, toggleFavorite, markRoomReadOverSocket, setCallTypeOverSocket } from "../components/home/zoom/api";
 import ChatInput from "../components/chat/chat-input";
 import ChatSkeleton from "../components/chat/chat-skeleton";
 import { Alert } from "react-native";
@@ -73,7 +74,7 @@ const MessageItem = memo(({ message, sender, receiver, lang, isNextMessageOwner,
                         </Text>
                         {message.type === 'call' && (
                             <View style={{ marginVertical: 10, justifyContent:'center', flexDirection: 'row', }}>
-                                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }} onPress={onMakeCall}>
+                                <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }} onPress={() => onMakeCall(false)}>
                                     <Ionicons name="call-outline" size={15} color="#000" />
                                     <Text style={{ fontSize: 15, fontWeight: '500', color: '#000' }}>Gọi lại</Text>
                                 </TouchableOpacity>
@@ -108,6 +109,20 @@ const ChatboxScreen = memo(({ navigation, route }) => {
     const flatListRef = useRef(null);
     const previousMessageCount = useRef(messages.length);
     const isInitialMount = useRef(true);
+    const isFocusedRef = useRef(false);
+
+    // While the conversation is on screen it is read: no unread badge for it in the contact list, and
+    // messages that come in are marked read on the server too.
+    useFocusEffect(useCallback(() => {
+        isFocusedRef.current = true;
+        dispatch({ type: 'SET_ACTIVE_ROOM', payload: room_id });
+        dispatch({ type: 'ROOM_READ', payload: room_id });
+        markRoomReadOverSocket(io, room_id);
+        return () => {
+            isFocusedRef.current = false;
+            dispatch({ type: 'LEAVE_ACTIVE_ROOM', payload: room_id });
+        };
+    }, [room_id, io, dispatch]));
 
     const typing = useMemo(() => isTyping && isTyping.roomID === room_id, [isTyping]);
     useEffect(() => {
@@ -161,7 +176,8 @@ const ChatboxScreen = memo(({ navigation, route }) => {
         }
     }, [room_id, counterpart, profile.token, io, dispatch, lang]);
 
-    const onMakeCall = useCallback(async () => {
+    // video: false for an audio-only call (camera off on both sides).
+    const onMakeCall = useCallback(async (video) => {
         if (!sender || !receiver || isLoading) return;
 
         setIsLoading(true);
@@ -179,10 +195,13 @@ const ChatboxScreen = memo(({ navigation, route }) => {
             const response = await initRoom(params, profile.token);
 
             if (response._id) {
+                // Before OnCall rings the callee.
+                await setCallTypeOverSocket(io, response._id, video);
                 navigation.navigate('OnCall', {
                     room_id,
                     meeting_id: response._id,
-                    counterpart: receiver
+                    counterpart: receiver,
+                    video,
                 });
             } else {
                 Alert.alert(lang.error, response.msg);
@@ -192,7 +211,7 @@ const ChatboxScreen = memo(({ navigation, route }) => {
         } finally {
             setIsLoading(false);
         }
-    }, [sender, receiver, room_id, profile.token, dispatch, navigation, lang, isLoading]);
+    }, [sender, receiver, room_id, profile.token, io, dispatch, navigation, lang, isLoading]);
 
     const onTyping = useCallback(async () => {
         if (!currentRoom || !profile.token) return;
@@ -273,6 +292,7 @@ const ChatboxScreen = memo(({ navigation, route }) => {
         if (newMessage && newMessage.room === room_id) {
             setMessages(prev => prev.some(msg => msg._id === newMessage._id) ? prev : [newMessage, ...prev]);
             dispatch({ type: 'SET_NEW_MESSAGE', payload: false });
+            if (isFocusedRef.current) markRoomReadOverSocket(io, room_id);
         }
     }, [newMessage]);
     // Track new messages for smooth scroll
@@ -352,10 +372,10 @@ const ChatboxScreen = memo(({ navigation, route }) => {
                             </Text>
                         </View>
                         <View style={styles.headerRight}>
-                            <TouchableOpacity onPress={onMakeCall}>
+                            <TouchableOpacity onPress={() => onMakeCall(false)}>
                                 <Ionicons name="call-outline" size={25} color="#fff" />
                             </TouchableOpacity>
-                            <TouchableOpacity onPress={onMakeCall}>
+                            <TouchableOpacity onPress={() => onMakeCall(true)}>
                                 <Ionicons name="videocam-outline" size={30} color="#fff" />
                             </TouchableOpacity>
                         </View>
@@ -412,7 +432,8 @@ const ChatboxScreen = memo(({ navigation, route }) => {
                     </View>
                 )}
                 {currentRoom &&  (
-                    <View style={{ flex: 0.1 }}>
+                    // Sized to the input, not a share of the screen (too tall, and cut off once the keyboard opened)
+                    <View style={{ paddingVertical: 6 }}>
                         <ChatInput
                             onSend={onSend}
                             lang={lang}

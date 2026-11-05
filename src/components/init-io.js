@@ -89,14 +89,15 @@ const initIO = async (token, dispatch, navigation, { onForceLogout } = {}) => {
   io.on('authenticated', () => {
     console.warn('IO authenticated');
     dispatch({ type: 'SET_IO', payload: io });
+    // Also on a reconnect: messages that came in while the socket was down never reached the list.
+    dispatch({ type: 'REFRESH_ROOMS' });
     setCallSocket(io);
   });
 
+  // data: { message, room, unreadCount } — unreadCount is this user's count for the room, this message included.
   io.on('message-in', (data) => {
-    dispatch({ type: 'SET_NEW_MESSAGE', payload: data.message });
+    dispatch({ type: 'MESSAGE_IN', payload: data });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy)
-
-    const { room, message } = data;
   });
 
   io.on('newProducer', (data) => {
@@ -117,13 +118,16 @@ const initIO = async (token, dispatch, navigation, { onForceLogout } = {}) => {
 
   io.on('call', (data) => {
     dispatch({ type: 'SET_END_CALL', payload: false });
+    // false for an audio-only call; servers from before audio calls don't send it.
+    const hasVideo = data.hasVideo !== false;
     if (Platform.OS === 'ios') {
       if (AppState.currentState === 'active') {
         navigation.navigate('OnCall', {
           room_id: data.room._id,
           meeting_id: data.meetingID,
           counterpart: data.counterpart,
-          incoming: true
+          incoming: true,
+          video: hasVideo,
         });
       } else {
         displayIncomingVideoCall(RNCallKeep, {
@@ -132,7 +136,7 @@ const initIO = async (token, dispatch, navigation, { onForceLogout } = {}) => {
           counterpart: data.counterpart,
           callerName: `${data.counterpart.firstName || ''} ${data.counterpart.lastName || ''}`.trim() || 'Incoming call',
           handle: data.counterpart._id,
-          hasVideo: true,
+          hasVideo,
         });
       }
     }

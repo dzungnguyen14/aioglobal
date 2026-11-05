@@ -29,38 +29,49 @@ const SearchContactAvatar = memo(({ account }) => {
 
 const ChatItem = memo(({ item, onEnterChat, ownerId, lang }) => {
   const receiver = item.people?.find(person => person._id !== ownerId);
-  const isAuthor = item.lastMessage?.author === ownerId;
-  
+  // An ID from the list; the author itself when the message came in over the socket
+  const lastAuthor = item.lastMessage?.author;
+  const isAuthor = (lastAuthor?._id ?? lastAuthor) === ownerId;
+  const unreadCount = item.unreadCount || 0;
+  const hasUnread = unreadCount > 0;
+
   // Memoize truncated message
-  const truncatedMessage = item.lastMessage?.content?.length > 25 
+  const truncatedMessage = item.lastMessage?.content?.length > 25
     ? `${item.lastMessage.content.substring(0, 25)}...`
     : item.lastMessage?.content;
 
   if (!receiver) return null;
-  
+
   return (
     <TouchableOpacity
       onPress={() => onEnterChat(item)}
-      style={zoomStyles.chatItemContainer}
+      style={[zoomStyles.chatItemContainer, hasUnread && zoomStyles.chatItemContainerUnread]}
       activeOpacity={0.7}
     >
       <ContactAvatar account={receiver} />
       <View style={zoomStyles.chatItemContent}>
-        <Text style={zoomStyles.chatItemName} numberOfLines={1}>
+        <Text style={[zoomStyles.chatItemName, hasUnread && zoomStyles.chatItemNameUnread]} numberOfLines={1}>
           {receiver.firstName} {receiver.lastName}
         </Text>
         {item.lastMessage && (
-          <Text style={zoomStyles.chatItemMessage} numberOfLines={1}>
+          <Text style={[zoomStyles.chatItemMessage, hasUnread && zoomStyles.chatItemMessageUnread]} numberOfLines={1}>
             {isAuthor && "Bạn: "}
             {truncatedMessage}
           </Text>
         )}
       </View>
-      {item.lastUpdate && (
-        <Text style={zoomStyles.chatItemTime}>
-          {formatDateToTime(item.lastUpdate, lang)}
-        </Text>
-      )}
+      <View style={zoomStyles.chatItemMeta}>
+        {item.lastUpdate && (
+          <Text style={[zoomStyles.chatItemTime, hasUnread && zoomStyles.chatItemTimeUnread]}>
+            {formatDateToTime(item.lastUpdate, lang)}
+          </Text>
+        )}
+        {hasUnread && (
+          <View style={zoomStyles.unreadBadge}>
+            <Text style={zoomStyles.unreadBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+          </View>
+        )}
+      </View>
     </TouchableOpacity>
   );
 }, (prevProps, nextProps) => {
@@ -68,6 +79,7 @@ const ChatItem = memo(({ item, onEnterChat, ownerId, lang }) => {
   return (
     prevProps.item._id === nextProps.item._id &&
     prevProps.item.lastUpdate === nextProps.item.lastUpdate &&
+    prevProps.item.unreadCount === nextProps.item.unreadCount &&
     prevProps.ownerId === nextProps.ownerId
   );
 });

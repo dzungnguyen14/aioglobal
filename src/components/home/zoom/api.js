@@ -128,6 +128,16 @@ export const postTypingOverSocket = (io, data, token) => {
     if (!io?.connected) return postTyping(data, token);
     io.emit('typing', { roomID: data.room?._id, isTyping: data.isTyping });
 };
+
+// The user has seen the room's messages: clears its unread count on the server.
+export const markRoomReadOverSocket = (io, roomId) => {
+    if (io?.connected && roomId) io.emit('read-room', { roomID: roomId });
+};
+
+// Video or audio-only call, told to the call server before the callee is rung so their app shows and
+// joins the same kind of call. Resolves null when it could not be sent: the call is then a video call.
+export const setCallTypeOverSocket = (io, meetingId, video) =>
+    requestOverSocket(io, 'call-type', { meetingID: meetingId, video }, 3000);
 // New API Server
 
 

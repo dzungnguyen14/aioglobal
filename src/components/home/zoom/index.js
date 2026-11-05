@@ -20,10 +20,11 @@ const HomeZoom = memo(({ token, navigation, profile }) => {
   const { lang } = useLang();
   const { state, dispatch } = useGlobal();
   const { recentRooms, myZoomID, favoriteList, io } = state || {};
-  
+  // The list is global state: home.js loads it and incoming messages update it (state/global.js).
+  const data = recentRooms ?? [];
+  const ownerId = myZoomID ?? '';
+
   const [search, setSearch] = useState('');
-  const [data, setData] = useState(recentRooms ?? []);
-  const [ownerId, setOwnerId] = useState(myZoomID ?? '');
   const [isSearch, setIsSearch] = useState(false);
   const [resultSearch, setResultSearch] = useState([]);
   const [pageType, setPageType] = useState(PAGES_TYPE.HOME);
@@ -51,29 +52,22 @@ const HomeZoom = memo(({ token, navigation, profile }) => {
     try {
       setIsLoading(true);
       const res = await fetchContactsOverSocket(io, token);
-      
-      if (!isMountedRef.current) return;
-      
-      setOwnerId(res.owner_id);
-      setData(res.rooms || []);
-      
-      if (state.recentRooms !== res.rooms) {
-        dispatch({ type: 'SET_RECENT_ROOMS', payload: res.rooms || [] });
-      }
-      if (state.myZoomID !== res.owner_id) {
+
+      // A failed reload keeps the list shown.
+      if (!isMountedRef.current || !Array.isArray(res?.rooms)) return;
+
+      dispatch({ type: 'SET_RECENT_ROOMS', payload: res.rooms });
+      if (res.owner_id) {
         dispatch({ type: 'SET_MY_ZOOM_ID', payload: res.owner_id });
       }
     } catch (error) {
       console.error('Fetch contacts error:', error);
-      if (isMountedRef.current) {
-        setData([]);
-      }
     } finally {
       if (isMountedRef.current) {
         setIsLoading(false);
       }
     }
-  }, [token, io, dispatch, state.recentRooms, state.myZoomID]);
+  }, [token, io, dispatch]);
 
   const fetchFavoriteContacts = useCallback(async () => {
     if (!token || !isMountedRef.current) return;
@@ -97,15 +91,11 @@ const HomeZoom = memo(({ token, navigation, profile }) => {
     }
   }, [token, io, dispatch]);
 
+  // Reloaded whenever the tab is shown (e.g. back from a chat); home.js reloads it on socket connect.
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', fetchData);
     return unsubscribe;
   }, [navigation, fetchData]);
-
-  // Again once the socket is authenticated, so the list comes over it.
-  useEffect(() => {
-    fetchData();
-  }, [io]);
 
   useEffect(() => {
     if (isSearch) {
@@ -263,7 +253,7 @@ const HomeZoom = memo(({ token, navigation, profile }) => {
       {/* Home page - Recent chats */}
       {pageType === PAGES_TYPE.HOME && (
         <>
-          {isLoading ? (
+          {isLoading && data.length === 0 ? (
             <SkeletonList type="chat" count={8} />
           ) : (
             <FlatList

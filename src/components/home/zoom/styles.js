@@ -132,6 +132,39 @@ export const zoomStyles = StyleSheet.create({
     color: COLORS.text.light,
     fontWeight: '500',
   },
+  // A conversation with unread messages
+  chatItemContainerUnread: {
+    backgroundColor: '#EAF3FC',
+  },
+  chatItemNameUnread: {
+    fontWeight: '700',
+  },
+  chatItemMessageUnread: {
+    color: COLORS.text.primary,
+    fontWeight: '600',
+  },
+  chatItemTimeUnread: {
+    color: COLORS.primary,
+    fontWeight: '700',
+  },
+  chatItemMeta: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  unreadBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    backgroundColor: COLORS.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unreadBadgeText: {
+    color: COLORS.surface,
+    fontSize: 11,
+    fontWeight: '700',
+  },
   contactItemContainer: {
     paddingHorizontal: 16,
     paddingVertical: 14,

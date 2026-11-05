@@ -11,6 +11,7 @@ import { APP_VERSION } from "../constants/home";
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import HomeZoom from "../components/home/zoom";
+import { fetchContactsOverSocket } from "../components/home/zoom/api";
 import { clearItem, getItem, setItem } from "../shared/utils";
 import { USER_TOKEN_KEY, USER_TERMS_AGREED, WALLET_STORAGE_TOKEN_KEY } from "../shared/constant";
 import TermsAgreementModal from "../components/terms-agreement";
@@ -127,7 +128,7 @@ const HomeScreen = ({ navigation, route }) => {
   const { item } = route.params ?? {};
   const { lang, value } = useLang();
   const { state, dispatch } = useGlobal();
-  const { profile } = state;
+  const { profile, io, recentRooms, roomsRefresh } = state;
   const [isLoading, setIsLoading] = useState(false);
   const [zoomToken, setZoomToken] = useState(null);
   const [isNewFeature, setIsNewFeature] = useState(false);
@@ -270,6 +271,23 @@ const HomeScreen = ({ navigation, route }) => {
     }
   }, [zoomToken, dispatch, navigation]);
 
+  // The conversation list is loaded here, not only in the chat tab, so that tab's unread badge is
+  // right before it is opened. Reloaded on REFRESH_ROOMS: every socket (re)connect, and a message
+  // for a conversation that is not in the list yet.
+  useEffect(() => {
+    if (!roomsRefresh || !io || !item?.token) return;
+    fetchContactsOverSocket(io, item.token).then((res) => {
+      if (!Array.isArray(res?.rooms)) return;
+      dispatch({ type: 'SET_RECENT_ROOMS', payload: res.rooms });
+      if (res.owner_id) dispatch({ type: 'SET_MY_ZOOM_ID', payload: res.owner_id });
+    });
+  }, [roomsRefresh, io, item?.token, dispatch]);
+
+  const unreadMessages = useMemo(
+    () => recentRooms.reduce((total, room) => total + (room.unreadCount || 0), 0),
+    [recentRooms],
+  );
+
   const registerForPushNotificationsAsync = async () => {
     let token = null;
     await messaging().requestPermission();
@@ -330,7 +348,15 @@ const HomeScreen = ({ navigation, route }) => {
             component={TabNewfeedScreen}
           />
           {toggleOS && (
-            <Tab.Screen listeners={listenersChatFocus} options={{ tabBarLabel: lang.chats }} name={TabRoute.TabContact} component={TabZoomScreen} />
+            <Tab.Screen
+              listeners={listenersChatFocus}
+              options={{
+                tabBarLabel: lang.chats,
+                tabBarBadge: unreadMessages > 0 ? (unreadMessages > 99 ? '99+' : unreadMessages) : undefined,
+              }}
+              name={TabRoute.TabContact}
+              component={TabZoomScreen}
+            />
           )}
           {toggleOS && (
             <Tab.Screen listeners={listenersShopFocus} options={{ tabBarLabel: lang.shopping }} name={TabRoute.TabStore} component={TabStoreScreen} />

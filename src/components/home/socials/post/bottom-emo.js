@@ -4,17 +4,27 @@ import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import styles from './style';
 import { useLang } from '../../../../shared/hooks';
 import { fetchSocial } from '../../../../fetcher/api';
-import { getItem } from 'expo-secure-store';
+import { getItem } from '../../../../shared/utils';
 
 const BottomEmo = ({ hideComment, onClickComment, item, profile, social_id}) => {
-    const apiSocialAPI = getItem('SOCIAL_API_URL');
     const likedUserIds = item.liked_user_ids ? item.liked_user_ids.split(',') : [];
     const [like, setLike] = React.useState(likedUserIds.includes(String(social_id)));
     const [likeCount, setLikeCount] = React.useState(item.like_count ?? 0);
     const { lang } = useLang();
+
+    // The social config (social_id) can arrive after the posts are rendered.
+    useEffect(() => {
+        setLike(likedUserIds.includes(String(social_id)));
+    }, [social_id, item.liked_user_ids]);
+
+    // Read the URL only when it is needed: a synchronous SecureStore read on every render
+    // blocked the JS thread for each post (slow Keystore decryption on Android).
+    const getSocialApi = () => getItem('SOCIAL_API_URL');
+
     const onLike = async () => {
         setLikeCount(prev => prev + 1);
         setLike(prev => !prev);
+        const apiSocialAPI = await getSocialApi();
         const resp = await fetchSocial(apiSocialAPI + '/likes_app', {
             id: item.blog_id,
             type: 'blogs',
@@ -27,7 +37,8 @@ const BottomEmo = ({ hideComment, onClickComment, item, profile, social_id}) => 
     const onDislike = async () => {
         setLikeCount(prev => prev - 1);
         setLike(prev => !prev);
-         const resp = await fetchSocial(apiSocialAPI + '/likes_app', {
+        const apiSocialAPI = await getSocialApi();
+        const resp = await fetchSocial(apiSocialAPI + '/likes_app', {
             id: item.blog_id,
             type: 'blogs',
             action: 'unlike',

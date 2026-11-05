@@ -10,7 +10,12 @@ const initialState = {
   io: null,
   onlineUsers: [],
   IS_END_CALL: false,
+  // The chat tab's conversation list, each room with the user's unreadCount (loaded in pages/home.js).
   recentRooms: [],
+  // Bumped to reload recentRooms.
+  roomsRefresh: 0,
+  // The conversation open on screen (pages/chatbox.js): its messages are read as they come in.
+  activeRoomId: null,
   currentRoom: null,
   myZoomID: null,
   historyMessages: {},
@@ -33,6 +38,36 @@ const initialState = {
   forceEndCall: false,
 };
 
+const authorIdOf = (message) => message.author?._id ?? message.author;
+
+// A message from someone else ('message-in'): shown in its chat if open (newMessage), and its
+// conversation moves to the top of recentRooms with the server's unread count, or read when it is
+// the one on screen. A conversation not in the list yet reloads the list.
+function messageIn(state, { message, unreadCount }) {
+  const roomId = String(message.room);
+  const room = state.recentRooms.find((item) => item._id === roomId);
+  if (!room) return { ...state, newMessage: message, roomsRefresh: state.roomsRefresh + 1 };
+
+  const updated = {
+    ...room,
+    // the list has lastMessage.author as an ID
+    lastMessage: { ...message, author: authorIdOf(message) },
+    lastUpdate: message.date,
+    lastAuthor: authorIdOf(message),
+    unreadCount: state.activeRoomId === roomId ? 0 : unreadCount ?? (room.unreadCount || 0) + 1,
+  };
+  return {
+    ...state,
+    newMessage: message,
+    recentRooms: [updated, ...state.recentRooms.filter((item) => item !== room)],
+  };
+}
+
+function markRoomRead(rooms, roomId) {
+  if (!rooms.some((room) => room._id === roomId && room.unreadCount)) return rooms;
+  return rooms.map((room) => (room._id === roomId ? { ...room, unreadCount: 0 } : room));
+}
+
 // 2. Reducer
 function reducer(state, action) {
   switch (action.type) {
@@ -49,7 +84,18 @@ function reducer(state, action) {
     case 'SET_END_CALL':
       return { ...state, IS_END_CALL: action.payload };
     case 'SET_RECENT_ROOMS':
-      return { ...state, recentRooms: action.payload };
+      return { ...state, recentRooms: markRoomRead(action.payload, state.activeRoomId) };
+    case 'REFRESH_ROOMS':
+      return { ...state, roomsRefresh: state.roomsRefresh + 1 };
+    case 'MESSAGE_IN':
+      return messageIn(state, action.payload);
+    case 'ROOM_READ':
+      return { ...state, recentRooms: markRoomRead(state.recentRooms, action.payload) };
+    case 'SET_ACTIVE_ROOM':
+      return { ...state, activeRoomId: action.payload };
+    case 'LEAVE_ACTIVE_ROOM':
+      // unless another conversation was opened meanwhile
+      return state.activeRoomId === action.payload ? { ...state, activeRoomId: null } : state;
     case 'SET_MY_ZOOM_ID':
       return { ...state, myZoomID: action.payload };
     case 'SET_CURRENT_ROOM':

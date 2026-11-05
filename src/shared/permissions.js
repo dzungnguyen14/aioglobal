@@ -334,23 +334,27 @@ const waitForAppActive = (timeoutMs) => new Promise((resolve) => {
  * Asks for whatever is missing and explains (with a shortcut to Settings when the user chose
  * "Don't ask again") when it is refused.
  * @param {Object} lang - Language object for localized messages
- * @returns {Promise<boolean>} true when both permissions are granted
+ * @param {boolean} video - false for an audio-only call, which only needs the microphone
+ * @returns {Promise<boolean>} true when the permissions are granted
  */
-export const ensureCallPermissionsAndroid = async (lang = {}) => {
+export const ensureCallPermissionsAndroid = async (lang = {}, video = true) => {
     if (Platform.OS !== 'android') return true;
+    const permissions = video ? CALL_PERMISSIONS_ANDROID : [PermissionsAndroid.PERMISSIONS.RECORD_AUDIO];
     try {
-        const granted = await Promise.all(CALL_PERMISSIONS_ANDROID.map((permission) => PermissionsAndroid.check(permission)));
+        const granted = await Promise.all(permissions.map((permission) => PermissionsAndroid.check(permission)));
         if (granted.every(Boolean)) return true;
 
         await waitForAppActive(30000);
-        const result = await PermissionsAndroid.requestMultiple(CALL_PERMISSIONS_ANDROID);
-        const statuses = CALL_PERMISSIONS_ANDROID.map((permission) => result[permission]);
+        const result = await PermissionsAndroid.requestMultiple(permissions);
+        const statuses = permissions.map((permission) => result[permission]);
         if (statuses.every((status) => status === PermissionsAndroid.RESULTS.GRANTED)) return true;
 
         const blocked = statuses.includes(PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN);
         Alert.alert(
             lang.permission_required || 'Permission Required',
-            lang.call_permission_denied || 'Camera and microphone access is required to join the call.',
+            video
+                ? lang.call_permission_denied || 'Camera and microphone access is required to join the call.'
+                : lang.microphone_permission_denied || 'Microphone access is required to join the call.',
             blocked
                 ? [
                     { text: lang.cancel || 'Cancel', style: 'cancel' },

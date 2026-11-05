@@ -93,6 +93,8 @@ export function cacheIncomingCall(raw) {
       counterpart: parsed.counterpart || existing.counterpart,
       callerName: parsed.callerName === 'AIOGlobal' ? existing.callerName : parsed.callerName,
       handle: parsed.handle === 'aio' ? existing.handle : parsed.handle,
+      // parseCallPayload makes it a video call when the data doesn't say
+      hasVideo: (raw?.hasVideo ?? raw?.has_video) != null ? parsed.hasVideo : existing.hasVideo,
     }
     : parsed;
   incomingCalls.set(call.uuid, call);

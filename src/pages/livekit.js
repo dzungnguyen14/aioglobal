@@ -16,6 +16,7 @@ import {
   VideoTrack,
   isTrackReference,
   useLocalParticipant,
+  useRemoteParticipants,
 } from '@livekit/react-native';
 import { Track, LogLevel, setLogLevel } from 'livekit-client';
 import { Ionicons } from '@expo/vector-icons';
@@ -48,15 +49,19 @@ function endCallKeep(callUUID) {
   }
 }
 
-const RoomView = ({ navigation, profile, calleeID, callUUID, meetingId }) => {
+const RoomView = ({ navigation, profile, calleeID, callUUID, meetingId, video, lang }) => {
   const { dispatch, state } = useGlobal();
   const tracks = useTracks([
     { source: Track.Source.Camera, withPlaceholder: true },
     { source: Track.Source.Microphone, withPlaceholder: false },
   ]);
   const { localParticipant } = useLocalParticipant();
+  const remoteParticipants = useRemoteParticipants();
   const [isMuted, setIsMuted] = useState(false);
-  const [isCameraOff, setIsCameraOff] = useState(false);
+  // An audio call starts with the camera off (it can still be turned on)
+  const [isCameraOff, setIsCameraOff] = useState(!video);
+  // Loudspeaker in a voice call, which starts on the earpiece
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
   const leftRef = useRef(false);
   
   // Camera/mic are already enabled by <LiveKitRoom audio video>; enabling them again here
@@ -74,10 +79,13 @@ const RoomView = ({ navigation, profile, calleeID, callUUID, meetingId }) => {
     track.participant.identity !== localParticipant.identity
   );
 
-  // Talk time starts once the other side is in the room, not while it is still ringing.
+  // Talk time starts once the other side is in the room, not while it is still ringing. Its
+  // participant, not its camera: there is none in an audio call.
   useEffect(() => {
-    if (remoteTracks.length > 0) markCallStarted(meetingId);
-  }, [remoteTracks.length > 0, meetingId]);
+    if (remoteParticipants.length > 0) markCallStarted(meetingId);
+  }, [remoteParticipants.length > 0, meetingId]);
+
+  const remoteName = remoteParticipants[0]?.name || remoteParticipants[0]?.identity || '';
 
   const leaveRoom = () => {
     if (leftRef.current) return;
@@ -129,6 +137,20 @@ const RoomView = ({ navigation, profile, calleeID, callUUID, meetingId }) => {
     }
   };
 
+  // iOS can only force the speaker or go back to the default route (the earpiece in a voice call).
+  const toggleSpeaker = async () => {
+    const speakerOn = !isSpeakerOn;
+    const output = Platform.OS === 'ios'
+      ? (speakerOn ? 'force_speaker' : 'default')
+      : (speakerOn ? 'speaker' : 'earpiece');
+    try {
+      await AudioSession.selectAudioOutput(output);
+      setIsSpeakerOn(speakerOn);
+    } catch (error) {
+      console.error('Error switching audio output:', error);
+    }
+  };
+
   const renderRemoteTrack = ({ item }) => {
     if (isTrackReference(item)) {
       return (
@@ -153,6 +175,15 @@ const RoomView = ({ navigation, profile, calleeID, callUUID, meetingId }) => {
           keyExtractor={(item, index) => `remote-${index}`}
           style={styles.remoteContainer}
         />
+      ) : remoteParticipants.length > 0 ? (
+        // In the room without a camera: an audio call, or their camera is off
+        <View style={styles.emptyContainer}>
+          <View style={styles.remoteAvatar}>
+            <Text style={styles.remoteAvatarText}>{remoteName.trim().charAt(0).toUpperCase()}</Text>
+          </View>
+          <Text style={styles.remoteName}>{remoteName}</Text>
+          {!video && <Text style={styles.emptyText}>{lang.voice_call}</Text>}
+        </View>
       ) : (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>Đang kết nối...</Text>
@@ -184,9 +215,15 @@ const RoomView = ({ navigation, profile, calleeID, callUUID, meetingId }) => {
         >
           <Ionicons name='mic' size={24} color="#fff" />
         </TouchableOpacity>
-        
+
+        {!video && (
+          <TouchableOpacity style={[styles.controlButton, isSpeakerOn && styles.controlButtonOn]} onPress={toggleSpeaker}>
+            <Ionicons name='volume-high' size={24} color={isSpeakerOn ? '#000' : '#fff'} />
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity style={[styles.controlButton, isCameraOff && styles.controlButtonActive]} onPress={toggleCamera}>
-          <Ionicons name='camera' size={24} color="#fff" />
+          <Ionicons name={isCameraOff ? 'videocam-off' : 'videocam'} size={24} color="#fff" />
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.controlButton, styles.controlButtonActive]} onPress={handleLeaveMeeting}>
@@ -202,7 +239,8 @@ export default function LiveKitScreen({ route, navigation }) {
   const { state } = useGlobal();
   const { lang } = useLang();
   const { profile } = state;
-  const { token, wsURL, calleeID, callUUID, meetingId } = route.params;
+  // video: false for an audio-only call
+  const { token, wsURL, calleeID, callUUID, meetingId, video = true } = route.params;
   const [connected, setConnected] = useState(false);
 
   // Start the audio session first.
@@ -214,6 +252,16 @@ export default function LiveKitScreen({ route, navigation }) {
         await waitForCallAudioSession();
       }
       if (cancelled) return;
+      // A voice call plays on the earpiece like a phone call, a video call on the speaker; a bluetooth
+      // device or headset comes first either way. Set before the room connects: WebRTC applies it then.
+      await AudioSession.configureAudio({
+        android: {
+          preferredOutputList: video
+            ? ['bluetooth', 'headset', 'speaker', 'earpiece']
+            : ['bluetooth', 'headset', 'earpiece', 'speaker'],
+        },
+        ios: { defaultOutput: video ? 'speaker' : 'earpiece' },
+      });
       await AudioSession.startAudioSession();
       if (!cancelled) setConnected(true);
     };
@@ -222,7 +270,7 @@ export default function LiveKitScreen({ route, navigation }) {
       cancelled = true;
       AudioSession.stopAudioSession();
     };
-  }, [callUUID]);
+  }, [callUUID, video]);
 
   // Call screen closed: the app must no longer show over the lock screen.
   useEffect(() => releaseCallLockScreen, []);
@@ -254,7 +302,7 @@ export default function LiveKitScreen({ route, navigation }) {
         },
       }}
       audio={true}
-      video={true}
+      video={video}
     >
       <RoomView
         navigation={navigation}
@@ -262,6 +310,8 @@ export default function LiveKitScreen({ route, navigation }) {
         calleeID={calleeID}
         callUUID={callUUID}
         meetingId={meetingId}
+        video={video}
+        lang={lang}
       />
     </LiveKitRoom>
   );
@@ -309,6 +359,26 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     opacity: 0.7,
+  },
+  remoteAvatar: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#1976D2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  remoteAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 48,
+    fontWeight: '600',
+  },
+  remoteName: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '600',
+    marginBottom: 8,
   },
   localParticipantContainer: {
     position: 'absolute',
@@ -371,6 +441,9 @@ const styles = StyleSheet.create({
   },
   controlButtonActive: {
     backgroundColor: '#FF3B30',
+  },
+  controlButtonOn: {
+    backgroundColor: '#FFFFFF',
   },
   controlButtonText: {
     fontSize: 24,

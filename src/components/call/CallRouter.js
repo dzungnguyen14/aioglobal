@@ -70,7 +70,7 @@ export default function CallRouter({ navigationRef }) {
     let hideDelay = 0;
     try {
       // Before answer_call, so the caller isn't told we picked up a call we can't join.
-      const granted = await ensureCallPermissionsAndroid(langRef.current);
+      const granted = await ensureCallPermissionsAndroid(langRef.current, call.hasVideo !== false);
       if (!granted) {
         // Reported here first; the endCall event fired by endCallKeepCall is then skipped.
         const reported = reportCallEnded(call, token);
@@ -98,6 +98,7 @@ export default function CallRouter({ navigationRef }) {
           calleeID: call.counterpartId,
           callUUID: call.uuid,
           meetingId: call.meetingId,
+          video: call.hasVideo !== false,
         });
         hideDelay = HIDE_LOADING_DELAY_MS;
       }

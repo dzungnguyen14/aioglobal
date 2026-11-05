@@ -221,12 +221,16 @@ export const getPointIntructionUrl = (token) =>
 export const featureToggle = () =>
     makeRequest('post', `${API_HOST}/app/feature_toggle`);
 
+// Without a timeout a stuck request never settles on Android (OkHttp has no default timeout)
+// and the feed stays empty with no way to retry.
+const SOCIAL_TIMEOUT = 15000;
+
 export const getSocialsPosts = (param, token) => {
-    return makeRequest('post', `${API_HOST}/social/get_posts`, param, token);
+    return makeRequest('post', `${API_HOST}/social/get_posts`, param, token, SOCIAL_TIMEOUT);
 };
 
 export const getConfigSocial = (token) =>
-    makeRequest('post', `${API_HOST}/social/get_config`, {}, token);
+    makeRequest('post', `${API_HOST}/social/get_config`, {}, token, SOCIAL_TIMEOUT);
 
 export const fetchSocial = (url, data, token, method = 'post', isForm = false) => {
     // Don't pass timeout for form uploads - let it use the default 120s
