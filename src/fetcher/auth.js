@@ -1,5 +1,7 @@
 import { API_HOST } from "../shared/constant";
 import axios from "axios";
+import { handleAxiosError } from "./error";
+import "./retry";
 
 // Configure axios interceptors
 axios.interceptors.request.use(request => request);
@@ -17,16 +19,15 @@ const headers = {
     'Content-Type': 'application/json'
 };
 
-const handleAxiosError = (error) => ({
-    success: false,
-    msg: error.response?.data?.msg || JSON.stringify(error)
-});
+
 
 export const login = async (data) => {
     try {
         const response = await axios.post(API_HOST + "/auth/login", data, {
             headers,
-            timeout: 10000
+            timeout: 10000,
+            // Login has no side effect if sent twice, so a stale-connection failure is retried once.
+            retryOnNetworkError: true
         });
         console.log("Login response:", API_HOST + "/auth/login", response.data);
         return response.data;

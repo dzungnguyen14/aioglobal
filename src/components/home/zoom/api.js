@@ -1,5 +1,6 @@
 import { API_HOST } from "../../../shared/constant";
 import axios from "axios";
+import { handleAxiosError } from "../../../fetcher/error";
 
 // Configure axios interceptors
 axios.interceptors.request.use(request => request);
@@ -17,10 +18,7 @@ const headers = {
     'Content-Type': 'application/json'
 };
 
-const handleAxiosError = (error) => ({
-    success: false,
-    msg: error.response?.data?.msg || JSON.stringify(error)
-});
+
 
 const createAuthHeader = (token) => ({
     ...headers,

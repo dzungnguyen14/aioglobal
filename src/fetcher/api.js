@@ -1,5 +1,7 @@
 import { API_HOST, API_SOCIAL_HOST } from "../shared/constant";
 import axios from "axios";
+import { handleAxiosError } from "./error";
+import "./retry";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 
 // Configure axios interceptors
@@ -18,10 +20,7 @@ const headers = {
     'Content-Type': 'application/json'
 };
 
-const handleAxiosError = (error) => ({
-    success: false,
-    msg: error.response?.data?.msg || JSON.stringify(error)
-});
+
 
 const createAuthHeader = (token, isFormData = false) => ({
     ...headers,

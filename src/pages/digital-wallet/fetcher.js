@@ -1,4 +1,5 @@
 import axios from "axios";
+import { handleAxiosError } from "../../fetcher/error";
 import { API_HOST } from "../../shared/constant";
 import { makeRequest } from "../../fetcher/api";
 
@@ -17,10 +18,7 @@ const headers = {
     'Content-Type': 'application/x-www-form-urlencoded'
 };
 
-const handleAxiosError = (error) => ({
-    success: false,
-    msg: error.response?.data?.msg || JSON.stringify(error)
-});
+
 
 const createAuthHeader = (token) => ({
     ...headers,
