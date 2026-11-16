@@ -19,9 +19,7 @@ const MAX_WIDTH = Dimensions.get('window').width;
 
 const Post = ({ item, isInView, openActionSheet, profile, SOCIAL_CONFIG, onOpenProfile }) => {
     const { lang } = useLang();
-    const isAuthor = React.useMemo(() => {
-        return item.owner_id === SOCIAL_CONFIG.user.user_id;
-    }, [item, SOCIAL_CONFIG]);
+    const isAuthor = item.owner_id === SOCIAL_CONFIG.user.user_id;
 
     const [maxVisible, setMaxVisible] = useState(4);
     const [visible, setIsVisible] = useState(false);
